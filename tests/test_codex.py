@@ -214,3 +214,20 @@ def test_real_claude_calls_record_the_model(tmp_path):
         assert done.wait(10) and session.resolved_model("claude", "opus") == "fake-claude-model"
     finally:
         s.close()
+
+
+def test_list_models_codex_uses_visible_catalog_in_priority_order(tmp_path):
+    assert session.list_models("codex", _exe(tmp_path, "codex", FAKE_CODEX), str(tmp_path)) == [
+        ("model-a", "model-a"), ("model-b", "model-b")]
+
+
+def test_list_models_claude_resolves_each_alias(tmp_path):
+    opts = session.list_models("claude", _exe(tmp_path, "claude", FAKE_CLAUDE), str(tmp_path))
+    assert opts == [(a, f"fake-claude-model ({a})") for a in session.CLAUDE_ALIASES]
+
+
+def test_settings_prompt_carries_model_in_use_and_no_guessing_rule():
+    p = config_ops.config_prompt({"provider": "codex", "models": {"codex": ""}}, "ok", "what models?",
+                                 model_in_use="gpt-5.6-sol")
+    assert '"model": "(provider default)"' in p and '"model in use": "gpt-5.6-sol"' in p
+    assert "Never list, guess or recommend model names" in config_ops.CONFIG_SYSTEM_PROMPT

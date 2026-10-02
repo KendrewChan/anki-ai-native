@@ -15,6 +15,13 @@ def emit(obj):
     print(json.dumps(obj), flush=True)
 
 
+if sys.argv[1:3] == ["debug", "models"]:
+    print(json.dumps({"models": [
+        {"slug": "hidden-one", "visibility": "hide", "priority": 1},
+        {"slug": "model-b", "visibility": "list", "priority": 8},
+        {"slug": "model-a", "visibility": "list", "priority": 5},
+    ]}))
+    sys.exit(0)
 prompt = sys.stdin.read()
 sys.stderr.write("OpenAI Codex v0\n--------\nmodel: fake-codex-model\nprovider: openai\n--------\n")
 sys.stderr.flush()

@@ -121,3 +121,8 @@ Each graded review **replaces** the card's Missed section (in the field chosen b
 - Settings shows the **real model id**, never "default" (e.g. Codex default → `gpt-5.6-sol`, Claude `sonnet` → `claude-sonnet-5-5`).
 - Source = the CLI's own report, no hand-written mapping: Claude's stream-json `init` event (`model`), Codex's plain `exec` stderr header (`model: …`). Both appear before the model is called.
 - Real Claude calls record the name from their `init` event. When no name is known, Settings runs a lookup that starts the CLI and stops it as soon as the name appears (Codex ~0.1 s, Claude ~1.5 s). Names are saved in config (`resolved_models`, `"provider:configured"` → id) so they show instantly after a restart.
+
+## v1.7 — live model dropdown (2026-10-02)
+
+- Model row is a dropdown. First item = the current model (real id). On first click it loads the CLI's live list (never stored): Codex `codex debug models` (visibility "list", priority order); Claude = each alias (haiku/sonnet/opus/fable) resolved to its id via the init-event lookup, in parallel (~1.7 s). A "(default)" entry is offered when a specific model is set. Picking one saves it directly (no chat). After loading, the picker re-opens via `showPicker()` (falls back to focus → click again).
+- Settings AI gets the real model in use and is told it cannot see available models: never list/guess names; point to the Model dropdown; set a named model exactly as given.

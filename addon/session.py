@@ -463,3 +463,32 @@ def probe_model(provider: str, path: str, configured: str, cwd: str, timeout: fl
         raise SessionError("error", f"could not read the model name from {provider}")
     remember_model(provider, configured, found[0])
     return found[0]
+
+
+# --- live model list for the Settings dropdown (fetched on click, never stored) ---
+
+CLAUDE_ALIASES = ("haiku", "sonnet", "opus", "fable")  # Claude Code's own model names
+
+
+def list_models(provider: str, path: str, cwd: str, timeout: float = 30) -> list:
+    """[(value, label)] the CLI offers right now. Codex: its catalog; Claude: what each alias resolves to."""
+    if provider == "codex":
+        r = subprocess.run([path, "debug", "models"], capture_output=True, text=True,
+                           timeout=timeout, stdin=subprocess.DEVNULL)
+        models = json.loads(r.stdout).get("models") or []
+        listed = sorted((m for m in models if m.get("visibility") == "list"), key=lambda m: m.get("priority", 0))
+        return [(m["slug"], m["slug"]) for m in listed]
+    results = {}
+
+    def resolve(alias):
+        try:
+            results[alias] = probe_model("claude", path, alias, cwd, timeout)
+        except Exception:  # alias not available on this account: leave it out
+            pass
+
+    threads = [threading.Thread(target=resolve, args=(a,), daemon=True) for a in CLAUDE_ALIASES]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join(timeout + 5)
+    return [(a, f"{results[a]} ({a})") for a in CLAUDE_ALIASES if a in results]

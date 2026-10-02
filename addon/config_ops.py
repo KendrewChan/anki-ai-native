@@ -44,14 +44,19 @@ A change is one of:
 {"login": true}       — sign in to Claude (opens the browser)
 {"logout": true}      — also signs the user out of Claude Code on this computer; only when they explicitly ask to log out
 
+Models: you cannot see which models the user's plan offers, and your own knowledge of model names is out of date. Never list, guess or recommend model names. If asked what models exist, tell the user to click the Model dropdown in Configurations — it loads the live list from their CLI. If the user names a model, set it exactly as given.
+
 Only include changes the user asked for. If the request is unclear or impossible, ask a short question in "reply" with "changes": []. Questions about the settings need no changes."""
 
 
-def config_prompt(cfg: dict, auth: str, message: str, decks: dict = None, selected: str = None) -> str:
-    """decks: full deck name -> id (as str)."""
+def config_prompt(cfg: dict, auth: str, message: str, decks: dict = None, selected: str = None,
+                  model_in_use: str = None) -> str:
+    """decks: full deck name -> id (as str). model_in_use: the real model id the CLI reports."""
     decks = decks or {}
     settings = {k: cfg.get(k) for k in SETTINGS}
-    settings["model"] = model_for(cfg)
+    settings["model"] = model_for(cfg) or "(provider default)"
+    if model_in_use:
+        settings["model in use"] = model_in_use
     settings["models (per provider)"] = {p: model_for(cfg, p) for p in PROVIDERS}
     rules = "\n".join(f"{i}. {r}" for i, r in enumerate(cfg.get("custom") or [], 1)) or "(none)"
     names = {v: k for k, v in decks.items()}

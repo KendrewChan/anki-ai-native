@@ -11,8 +11,8 @@ from aqt import mw
 from . import config_ops
 from collections import deque
 
-from .session import (PROVIDER_LABELS, auth_command, find_cli, make_backend, model_for, probe_model,
-                      read_auth_status, resolved_model)
+from .session import (PROVIDER_LABELS, auth_command, find_cli, list_models, make_backend, model_for,
+                      probe_model, read_auth_status, resolved_model)
 
 STATE = "aiStudyConfig"
 
@@ -57,6 +57,25 @@ window.aiCfg = {
     document.getElementById("status").textContent = status;
     const cmd = document.getElementById("cmd");
     cmd.disabled = busy; if (!busy) cmd.focus();
+  },
+  loadModels(e, sel) {
+    if (sel.dataset.loaded) return;
+    e.preventDefault();
+    if (sel.dataset.loading) return;
+    sel.dataset.loading = "1";
+    sel.add(new Option("loading…", "", false, false));
+    sel.options[sel.options.length - 1].disabled = true;
+    pycmd("aiCfg:models");
+  },
+  setModels(options, error) {
+    const sel = document.getElementById("model-sel");
+    if (!sel) return;
+    while (sel.options.length > 1) sel.remove(1);
+    options.forEach(([value, label]) => sel.add(new Option(label, value)));
+    if (error) { const o = new Option(error, ""); o.disabled = true; sel.add(o); }
+    sel.dataset.loaded = "1";
+    delete sel.dataset.loading;
+    try { sel.showPicker(); } catch (err) { sel.focus(); }
   },
 };
 document.getElementById("cmd").addEventListener("keydown", function (e) {
@@ -115,6 +134,11 @@ class ConfigPage:
         elif message.startswith("aiCfg:select:"):
             self.selected = message[len("aiCfg:select:"):]
             self._update(None)
+        elif message == "aiCfg:models":
+            self._load_models()
+        elif message.startswith("aiCfg:model:"):
+            self._apply([{"set": {"model": message[len("aiCfg:model:"):]}}])
+            self._update(None)
         elif message.startswith("aiCfg:provider:"):
             self._apply([{"set": {"provider": message[len("aiCfg:provider:"):]}}])
             self._update(None)
@@ -127,7 +151,10 @@ class ConfigPage:
         cfg = self._cfg()
         self.busy = True
         self._update("Thinking…")
-        prompt = config_ops.config_prompt(cfg, self.auth, text, self._decks(), self.selected)
+        provider, _path = self._provider(cfg)
+        in_use = resolved_model(provider, model_for(cfg)) or (cfg.get("resolved_models") or {}).get(
+            f"{provider}:{model_for(cfg)}")
+        prompt = config_ops.config_prompt(cfg, self.auth, text, self._decks(), self.selected, in_use)
         self._session(cfg).request(0, prompt, config_ops.parse_config_reply, 90, self._on_reply)
 
     def _on_reply(self, _id, result, err):
@@ -188,6 +215,29 @@ class ConfigPage:
             except Exception as e:  # missing binary, bad JSON, timeout — show it, don't crash the page
                 ok, text = False, f"unknown ({e.__class__.__name__}: {e})"
             mw.taskman.run_on_main(lambda: self._set_auth(ok, text))
+
+        threading.Thread(target=work, daemon=True).start()
+
+    def _load_models(self):
+        """Fill the Model dropdown with what the CLI offers right now (current model stays first)."""
+        cfg = self._cfg()
+        provider, path = self._provider(cfg)
+        configured = model_for(cfg)
+        cwd = self.cwd = self.cwd or tempfile.mkdtemp(prefix="anki_ai_cfg_")
+
+        def work():
+            error = None
+            try:
+                options = list_models(provider, path, cwd)
+                default = resolved_model(provider, "") or probe_model(provider, path, "", cwd)
+                if configured:
+                    options.insert(0, ("", f"{default} (default)"))
+            except Exception as e:
+                options, error = [], f"couldn't load models: {e}"
+            current = resolved_model(provider, configured) or configured
+            options = [(v, label) for v, label in options if v != configured and label.split(" ")[0] != current]
+            mw.taskman.run_on_main(lambda: mw.web.eval(
+                f"window.aiCfg && aiCfg.setModels({json.dumps(options)}, {json.dumps(error)});"))
 
         threading.Thread(target=work, daemon=True).start()
 
@@ -298,7 +348,12 @@ class ConfigPage:
             for label, key in (("Ask timeout (s)", "ask_timeout_s"),
                                ("Grade timeout (s)", "grade_timeout_s"), ("Missed append", "missed_append"))
         ]
-        rows.insert(2, ("Model", html.escape(self._model_name(provider, found, model_for(cfg)))))
+        configured = model_for(cfg)
+        current = html.escape(self._model_name(provider, found, configured))
+        model_select = (f'<select id="model-sel" onmousedown="aiCfg.loadModels(event, this)" '
+                        f'onchange="pycmd(\'aiCfg:model:\' + this.value)">'
+                        f'<option value="{html.escape(configured)}" selected>{current}</option></select>')
+        rows.insert(2, ("Model", model_select))
         path = cfg.get(f"{provider}_path") or ""
         rows.append((f"{PROVIDER_LABELS[provider]} path",
                      html.escape(path if path and path != "auto" else f"auto → {found}")))
