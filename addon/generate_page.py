@@ -21,8 +21,8 @@ MAX_READ_ROUNDS = 2  # times the AI may ask to read decks before answering one m
 CSS = CONFIG_CSS + """
 <style>
 #refrow { display: flex; gap: 0.4em; align-items: center; margin: 0.6em 0 0.2em; }
-#ref { flex: 1; padding: 0.45em 0.6em; font: inherit; border-radius: 6px; border: 1px solid #8888;
-       background: transparent; color: inherit; }
+#ref { flex: 1; padding: 0.45em 0.6em; font: inherit; border-radius: 6px; border: 1px dashed #8888;
+       background: transparent; color: inherit; cursor: default; outline: none; }
 #refinfo { font-size: 0.85em; opacity: 0.75; min-height: 1.2em; margin-bottom: 0.5em; }
 #refinfo.bad { color: #d33; opacity: 1; }
 .stg .deck { font-weight: 600; margin: 0.6em 0 0.2em; }
@@ -48,7 +48,7 @@ window.aiGen = {
     stg.querySelectorAll("details").forEach(d => { if (open.has(d.dataset.id)) d.open = true; });
     document.getElementById("status").textContent = status;
     const cmd = document.getElementById("cmd");
-    cmd.disabled = busy; if (!busy && document.activeElement !== document.getElementById("ref")) cmd.focus();
+    cmd.disabled = busy; if (!busy) cmd.focus();
   },
   setRef(path) { document.getElementById("ref").value = path; },
 };
@@ -62,12 +62,6 @@ document.getElementById("cmd").addEventListener("keydown", function (e) {
     pycmd("aiGen:send:" + v);
   }
 });
-const ref = document.getElementById("ref");
-ref.addEventListener("keydown", function (e) {
-  e.stopPropagation();
-  if (e.key === "Enter" && !e.isComposing) { e.preventDefault(); this.blur(); }
-});
-ref.addEventListener("change", function () { pycmd("aiGen:ref:" + this.value.trim()); });
 setTimeout(function () { document.getElementById("cmd").focus(); }, 0);
 </script>
 """
@@ -122,8 +116,8 @@ class GeneratePage:
     def _on_bridge(self, message: str):
         if message == "aiGen:back":
             mw.moveToState("deckBrowser")
-        elif message.startswith("aiGen:ref:"):
-            self.ref = message[len("aiGen:ref:"):]
+        elif message == "aiGen:clearref":
+            self.ref = ""
             self._update(None)
         elif message in ("aiGen:pickdir", "aiGen:pickfile"):
             self._pick(message == "aiGen:pickdir")
@@ -285,11 +279,11 @@ class GeneratePage:
             f'{CSS}<div id="cfg"><a class="back" onclick="pycmd(\'aiGen:back\')">← Back</a>'
             f"<h2>Generate cards</h2>"
             f'<div id="log">{self._log_html()}</div>'
-            f'<div id="refrow"><input id="ref" value="{html.escape(self.ref)}" '
-            f'placeholder="Reference file or folder on your Desktop (optional)">'
+            f'<div id="refrow"><input id="ref" readonly tabindex="-1" value="{html.escape(self.ref)}" '
+            f'placeholder="No reference chosen (optional)">'
             f'<button onclick="pycmd(\'aiGen:pickdir\')">Choose folder…</button>'
             f'<button onclick="pycmd(\'aiGen:pickfile\')">Choose file…</button>'
-            f'<button title="Clear" onclick="aiGen.setRef(\'\');pycmd(\'aiGen:ref:\')">×</button></div>'
+            f'<button title="Clear" onclick="aiGen.setRef(\'\');pycmd(\'aiGen:clearref\')">×</button></div>'
             f'<div id="refinfo"></div>'
             f'<input id="cmd" placeholder="What cards should I make or fix?">'
             f'<div id="status"></div><div id="sections"></div></div>{JS}'
