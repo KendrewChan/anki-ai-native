@@ -160,3 +160,16 @@ def test_card_prompts_carry_deck_rules():
 def test_claude_path_auto_values_reset_to_autodetect(value):
     new, log, _, _ = apply([{"set": {"claude_path": value}}], executable=False)
     assert new["claude_path"] == ""
+
+
+def test_toggle_flips_and_defaults_on():
+    assert config_ops.toggle_change({"missed_append": True}, "missed_append") == {"set": {"missed_append": False}}
+    assert config_ops.toggle_change({}, "sharp_questions") == {"set": {"sharp_questions": False}}  # missing = on
+    assert config_ops.toggle_change({"sharp_questions": False}, "sharp_questions") == {"set": {"sharp_questions": True}}
+    assert config_ops.toggle_on({}, "sharp_questions") is True
+    with pytest.raises(KeyError):
+        config_ops.toggle_change({}, "provider")
+    for key, (label, tip) in config_ops.TOGGLES.items():
+        assert key in config_ops.SETTINGS and label and len(tip) > 40
+    new, log, _, hist = apply([config_ops.toggle_change(BASE, "missed_append")])
+    assert new["missed_append"] is False and log == ["✓ missed_append: true → false"] and hist == [BASE]

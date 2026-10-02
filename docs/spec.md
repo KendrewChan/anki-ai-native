@@ -167,3 +167,4 @@ Each graded review **replaces** the card's Missed section (in the field chosen b
 ### v1.10 — Sharp questions on/off (2026-10-02)
 
 - New setting `sharp_questions` (default `true`; chat: "turn off sharp questions"). Off = every card behaves like a cloze card: no ask call, the card's own question is shown in a single answer box, and grading uses the card question. One AI call per card instead of two. Shown under Configurations as **Sharp questions**; configs saved before this setting existed count as on.
+- (later) **Sharp questions** and **Missed append** are On/Off toggle buttons under Configurations (`aiCfg:toggle:<key>`, through `apply_changes`, so the click is validated, saved and undoable like a chat change). Hovering the label or button shows a tooltip explaining the setting (`config_ops.TOGGLES` holds labels + tooltips). The chat still works too.

@@ -21,6 +21,29 @@ SETTINGS = {
     "codex_path": "absolute path to the codex CLI executable, or \"\" to auto-detect",
 }
 
+# On/off settings shown as toggle buttons on the settings page: key -> (label, tooltip). A missing key = on.
+TOGGLES = {
+    "sharp_questions": ("Sharp questions",
+                        "On: before you answer, the AI rewrites each card into sharp, concrete questions. "
+                        "Off: you answer the card's own question as written (faster: one AI call per card). "
+                        "Cloze cards always use their own question."),
+    "missed_append": ("Missed append",
+                      "On: after each graded review, what you missed is written onto the card's Back as one "
+                      "\"Missed (date)\" section, replacing the previous one, so the answer side shows your latest gaps. "
+                      "Off: cards are never changed."),
+}
+
+
+def toggle_on(cfg: dict, key: str) -> bool:
+    return bool(cfg.get(key, True))
+
+
+def toggle_change(cfg: dict, key: str) -> dict:
+    """The change that flips a toggle (KeyError for anything that isn't one)."""
+    TOGGLES[key]
+    return {"set": {key: not toggle_on(cfg, key)}}
+
+
 CONFIG_SYSTEM_PROMPT = """You manage the settings of an Anki add-on that uses Claude as a flashcard tutor. The user talks to you in plain language; you turn requests into changes.
 
 Settings you can change (key: meaning):

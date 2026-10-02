@@ -37,6 +37,8 @@ CSS = """
 .sect table { border-collapse: collapse; } .sect td { padding: 0.15em 1.2em 0.15em 0; vertical-align: top; }
 .sect td.k { opacity: 0.7; } .sect ol { margin: 0.2em 0 0 1.4em; padding: 0; }
 .sect button { margin-left: 0.6em; } .sect select { font: inherit; }
+.sect button.tog { margin-left: 0; min-width: 3.6em; } .sect button.tog.on { color: #27864a; font-weight: 600; }
+.sect td.k span[title] { cursor: help; border-bottom: 1px dotted #8888; }
 .tree { font-size: 0.95em; } .tree details, .tree .leaf { margin-left: 1.1em; }
 .tree > details, .tree > .leaf { margin-left: 0; }
 .tree summary { cursor: pointer; } .tree .leaf { padding-left: 1em; }
@@ -150,6 +152,11 @@ class ConfigPage:
         elif message.startswith("aiCfg:model:"):
             self._apply([{"set": {"model": message[len("aiCfg:model:"):]}}])
             self._update(None)
+        elif message.startswith("aiCfg:toggle:"):
+            key = message[len("aiCfg:toggle:"):]
+            if key in config_ops.TOGGLES:
+                self._apply([config_ops.toggle_change(self._cfg(), key)])
+                self._update(None)
         elif message.startswith("aiCfg:provider:"):
             self._apply([{"set": {"provider": message[len("aiCfg:provider:"):]}}])
             self._update(None)
@@ -389,11 +396,9 @@ class ConfigPage:
         )
         select = f'<select onchange="pycmd(\'aiCfg:provider:\' + this.value)">{options}</select>'
         rows = [("Provider", select), ("Login", login)] + [
-            (label, html.escape(str(cfg.get(key, key == "sharp_questions"))))  # saved configs predate it: on
-            for label, key in (("Ask timeout (s)", "ask_timeout_s"),
-                               ("Grade timeout (s)", "grade_timeout_s"), ("Missed append", "missed_append"),
-                               ("Sharp questions", "sharp_questions"))
-        ]
+            (label, html.escape(str(cfg.get(key))))
+            for label, key in (("Ask timeout (s)", "ask_timeout_s"), ("Grade timeout (s)", "grade_timeout_s"))
+        ] + [self._toggle_row(cfg, key) for key in config_ops.TOGGLES]
         configured = model_for(cfg)
         current = html.escape(self._model_name(provider, found, configured))
         model_select = (f'<select id="model-sel" onmousedown="aiCfg.loadModels(event, this)" '
@@ -415,6 +420,14 @@ class ConfigPage:
         return (f'<div class="sect"><h3>Configurations</h3><table>{table}</table></div>'
                 f'<div class="sect"><h3>Custom Generic Rules</h3>{rules}</div>'
                 f'<div class="sect"><h3>Deck Prompts</h3>{self._deck_html(cfg)}</div>')
+
+    def _toggle_row(self, cfg, key) -> tuple:
+        label, tip = config_ops.TOGGLES[key]
+        tip = html.escape(tip, quote=True)
+        on = config_ops.toggle_on(cfg, key)
+        button = (f'<button class="tog{" on" if on else ""}" title="{tip}" '
+                  f'onclick="pycmd(\'aiCfg:toggle:{key}\')">{"On" if on else "Off"}</button>')
+        return f'<span title="{tip}">{label}</span>', button
 
     def _deck_html(self, cfg) -> str:
         decks = self._decks()
