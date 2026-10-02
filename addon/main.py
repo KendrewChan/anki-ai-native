@@ -14,6 +14,7 @@ from aqt.reviewer import Reviewer
 
 from . import config_ops, grading, health, ui
 from .config_page import ConfigPage
+from .generate_page import GeneratePage
 from .session import make_backend
 
 ADDON = __name__.split(".")[0]
@@ -25,6 +26,7 @@ class State:
         self.session = None
         self.cwd = None
         self.page = None
+        self.gen_page = None
         self.action = None
         self.reset()
 
@@ -137,6 +139,8 @@ def on_js_message(handled, message: str, context):
             set_enabled(not S.enabled)
         elif message == "aiStudy:settings":
             S.page.open()
+        elif message == "aiStudy:generate":
+            S.gen_page.open()
         return (True, None)
     if not isinstance(context, Reviewer):
         return handled
@@ -231,7 +235,9 @@ def controls_html() -> str:
         f'<a href=# onclick="pycmd(\'aiStudy:toggle\');return false;" style="text-decoration:none">'
         f'AI Study: <b style="color:{color}">{on}</b></a>'
         ' &nbsp;·&nbsp; '
-        '<a href=# onclick="pycmd(\'aiStudy:settings\');return false;">⚙ Settings</a></div>'
+        '<a href=# onclick="pycmd(\'aiStudy:settings\');return false;">⚙ Settings</a>'
+        ' &nbsp;·&nbsp; '
+        '<a href=# onclick="pycmd(\'aiStudy:generate\');return false;">✨ Generate</a></div>'
     )
 
 
@@ -253,6 +259,7 @@ def setup_menu():
 
 def setup():
     S.page = ConfigPage(ADDON, end_session)
+    S.gen_page = GeneratePage(ADDON)
     setup_menu()
     gui_hooks.deck_browser_will_render_content.append(on_deck_browser)
     gui_hooks.overview_will_render_content.append(on_overview)

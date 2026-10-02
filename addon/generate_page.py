@@ -90,6 +90,7 @@ class GeneratePage:
         self.loaded = {}  # deck name -> [note dict] the AI asked to read
         self.busy = False
         self._backend = None
+        self._ref_cache = (None, None)  # (path, (info, is_bad)): folders aren't rescanned on every redraw
         setattr(mw, f"_{STATE}State", self._enter)
         setattr(mw, f"_{STATE}Cleanup", self._leave)
 
@@ -99,6 +100,7 @@ class GeneratePage:
         mw.moveToState(STATE)
 
     def _enter(self, _old_state, *_args):
+        self._ref_cache = (None, None)
         mw.bottomWeb.hide()
         mw.web.stdHtml(self._page_html(), context=self)
         mw.web.set_bridge_command(self._on_bridge, self)
@@ -125,9 +127,9 @@ class GeneratePage:
             self._update(None)
         elif message in ("aiGen:pickdir", "aiGen:pickfile"):
             self._pick(message == "aiGen:pickdir")
-        elif message == "aiGen:accept":
+        elif message == "aiGen:accept" and not self.busy:
             self._run_op(lambda col: _Result(generate_col.accept(col)), self._accepted)
-        elif message == "aiGen:discard":
+        elif message == "aiGen:discard" and not self.busy:
             self._run_op(lambda col: _Result(generate_col.discard(col)),
                          lambda n: self.say(f"Discarded {n} staged card{'s' if n != 1 else ''}. "
                                             "Edit → Undo brings them back."))
@@ -239,6 +241,11 @@ class GeneratePage:
         mw.web.eval(f"window.aiGen && aiGen.update({', '.join(json.dumps(a) for a in args)});")
 
     def _ref_info(self) -> tuple:
+        if self._ref_cache[0] != self.ref:
+            self._ref_cache = (self.ref, self._scan_ref())
+        return self._ref_cache[1]
+
+    def _scan_ref(self) -> tuple:
         if not self.ref.strip():
             return "Optional: a file or folder on your Desktop for the AI to make cards from (text files only).", False
         try:

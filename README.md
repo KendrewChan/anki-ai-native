@@ -28,6 +28,14 @@ Type what you want in plain words — "use opus", "give me 90 seconds to answer"
 - **Custom Generic Rules** — apply to every card.
 - **Deck Prompts** — one prompt per deck; subdecks inherit their parents'. Click a deck to see what applies to it.
 
+## Generate cards (✨ Generate)
+
+Next to ⚙ Settings. Optionally pick a **reference** — a file or folder on your **Desktop** (Choose folder… / Choose file…; text files only, e.g. .txt, .md, code). Then say what you want: "10 cards from these notes into Biology::Ch3", "improve my Chem cards using this file", "make card 3 shorter".
+
+- New and updated cards wait in a temporary deck, **AI Generate**, whose subdecks mirror your real decks. Nothing in your real decks changes yet — you can study or edit them there.
+- **Accept all** writes the updates into the original cards (review history kept) and moves new cards into their real decks; **Discard all** throws them away. Both can be undone with Edit → Undo.
+- New cards always go under one of your existing top-level decks.
+
 ## When something breaks
 
 Open **⚙ Settings**: it checks your AI CLI on open. If something's wrong you get a plain explanation with buttons — **Update**, **Roll back** to the last version that worked, **Log in**, **Allow more time**, switch provider, or **Copy error report** to send to the author. For problems in the add-on itself it can offer **Try AI repair**: another AI proposes a small fix, you approve it, and it's checked and undone automatically if it doesn't work (**Revert AI repair** undoes it later).
@@ -40,5 +48,5 @@ Open **⚙ Settings**: it checks your AI CLI on open. If something's wrong you g
 ## Development
 
 - `addon/` is the add-on; symlink it into `addons21/anki_ai` to develop live.
-- Tests: `pytest tests` (no Anki needed; `session.py` runs against `tests/fake_claude.py`).
+- Tests: `pytest tests` (no Anki needed; `session.py` runs against `tests/fake_claude.py`). `tests/test_generate_col.py` needs Anki's Python (see its docstring) and is skipped otherwise.
 - Design: `docs/spec.md`.
