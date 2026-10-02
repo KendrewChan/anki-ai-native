@@ -51,11 +51,11 @@ Settings you can change (key: meaning):
 
 Custom generic rules: a numbered list of plain-language instructions that apply to EVERY card (e.g. "grade strictly"). Rewrite vague requests into one clear, imperative rule.
 
-Deck prompts: each Anki deck can have ONE free-text prompt that applies to cards in that deck and all its subdecks (subdecks inherit parent prompts). Use these when the user mentions a deck or "this deck" (= the selected deck). Use the exact full deck name from the deck list. Setting a deck prompt replaces the old one — when the user says "also …", merge the old prompt and the new request into one prompt. Never copy a parent deck's prompt into a subdeck's — it is already inherited. A deck prompt that shapes the question side (sections, number of answer boxes, showing the card's question as written) only works while Sharp questions is on for that deck: if it is off there, say so in your reply and offer to turn it on.
+Deck prompts: each Anki deck can have ONE free-text prompt that applies to cards in that deck and all its subdecks (subdecks inherit parent prompts). Use these when the user mentions a deck or "this deck" (= the selected deck). Use the exact full deck name from the deck list. Setting a deck prompt replaces the old one — when the user says "also …", merge the old prompt and the new request into one prompt. Never copy a parent deck's prompt into a subdeck's — it is already inherited. A deck prompt applies to both the question side (sections, number of answer boxes, showing the card's question as written) and grading, whatever the deck's Sharp questions setting.
 
 Deck on/off settings (set_deck_ai, set_deck_sharp): on by default. Setting one on a deck makes all its subdecks follow (their own settings are dropped); set a subdeck afterwards to make an exception.
 - AI Study (set_deck_ai): off = that deck's cards use Anki's plain reviewer, no AI.
-- Sharp questions (set_deck_sharp): the AI first turns each card into sharp questions. Off = the user answers the card's own question as written (one AI call per card, faster).
+- Sharp questions (set_deck_sharp): the AI first turns each card into sharp questions. Off = the user answers the card's own question as written (one AI call per card, faster) — except on decks where a deck prompt applies: there the AI still reads the card first, keeps its question unless the deck prompt asks for something else (sections, more boxes, showing the question), and the prompt applies on both sides.
 A deck prompt CANNOT switch these — whenever the user wants AI Study or sharp questions on/off for a deck, use these changes, never a deck prompt. If a deck prompt only says to skip sharp questions, clear it in the same reply.
 
 Each message gives you the current settings, custom rules, deck list, deck prompts, the selected deck and login state, then the user's request.
@@ -125,6 +125,14 @@ def deck_chain(deck_name: str, decks: dict, prompts: dict) -> list:
         if p:
             chain.append((name, p))
     return chain
+
+
+def ask_mode(cfg: dict, deck_name: str, decks: dict) -> str:
+    """Question step for a card of this deck: "sharp" (Sharp questions on), "keep" (off, but a deck prompt applies: ask
+    anyway so the prompt shapes the question side, keeping the card's question unless it says otherwise), or "" (none)."""
+    if deck_toggle_on(cfg, "sharp", deck_name, decks):
+        return "sharp"
+    return "keep" if deck_chain(deck_name, decks, cfg.get("deck_prompts") or {}) else ""
 
 
 def deck_toggle_source(cfg: dict, toggle: str, deck_name: str, decks: dict):

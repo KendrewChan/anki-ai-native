@@ -76,9 +76,12 @@ def deck_rules_block(deck_rules: list) -> str:
     return "\n\nDeck rules (outer → inner):\n" + "\n".join(f"- {name}: {p}" for name, p in deck_rules)
 
 
-def ask_prompt(question: str, deck_rules: list = ()) -> str:
-    """Front only: sharp questions must come from the card's question, never its answer."""
-    return f"NEW CARD\n\nQuestion:\n{question}{deck_rules_block(deck_rules)}"
+def ask_prompt(question: str, deck_rules: list = (), sharp: bool = True) -> str:
+    """Front only: sharp questions must come from the card's question, never its answer.
+    sharp=False: Sharp questions is off for the deck but its deck rules still shape the question side."""
+    keep = ("" if sharp else "\n\nSharp questions are off for this deck: return the card's question unchanged as your one "
+            "question, unless the deck rules ask for something else (sections, more questions, other wording).")
+    return f"NEW CARD\n\nQuestion:\n{question}{keep}{deck_rules_block(deck_rules)}"
 
 
 def grade_prompt(question: str, asked: list, answer: str, user_answers: list, deck_rules: list = ()) -> str:

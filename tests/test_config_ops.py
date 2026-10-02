@@ -230,3 +230,14 @@ def test_deck_rules_outrank_general_rules():
     sp = grading.system_prompt(["grade strictly"])
     assert "Priority, highest first: deck rules, then the user's general rules" in sp
     assert "a card's deck rules win over them" in sp and "Deck rules, when given, take priority" in grading.EDIT_SYSTEM_PROMPT
+
+
+def test_ask_mode_deck_prompt_applies_with_sharp_off():
+    decks = {"SD": "1", "SD::Sub": "2", "Other": "3"}
+    cfg = {"deck_prompts": {"1": "seven sections"}, "deck_sharp": {"1": False, "3": False}}
+    assert config_ops.ask_mode(cfg, "SD::Sub", decks) == "keep"  # inherited prompt
+    assert config_ops.ask_mode(cfg, "Other", decks) == ""
+    assert config_ops.ask_mode({}, "Other", decks) == "sharp"
+    keep = grading.ask_prompt("Q", [("SD", "seven sections")], sharp=False)
+    assert "Sharp questions are off for this deck" in keep and keep.index("off for this deck") < keep.index("Deck rules")
+    assert "off for this deck" not in grading.ask_prompt("Q")

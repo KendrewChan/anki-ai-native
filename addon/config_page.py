@@ -382,6 +382,8 @@ class ConfigPage(ChatPage):
         """'<label>: [On/Off] (from <parent> | default) — subdecks follow' for the selected deck."""
         on, src = config_ops.deck_toggle_source(cfg, toggle, sel, decks)
         where = "" if src == sel else f" (from {src})" if src else " (default)"
+        if toggle == "sharp" and config_ops.ask_mode(cfg, sel, decks) == "keep":
+            where += " — the deck prompt still shapes the questions"
         js = html.escape(f"pycmd({json.dumps(f'aiCfg:decktoggle:{toggle}:{sel}')})", quote=True)
         return (f'<div class="inh">{config_ops.DECK_TOGGLES[toggle][1]}: '
                 f'<button class="tog{" on" if on else ""}" onclick="{js}">{"On" if on else "Off"}</button>'

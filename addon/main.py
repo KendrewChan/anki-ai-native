@@ -81,11 +81,11 @@ def deck_rules(card, c: dict) -> list:
     return config_ops.deck_chain(home_deck(card), deck_ids(), c.get("deck_prompts") or {})
 
 
-def rewrite_enabled(card) -> bool:
-    """Ask the AI for sharp questions first? Not for cloze cards, nor when turned off (globally or for the deck)."""
+def rewrite_enabled(card) -> str:
+    """Question step: "sharp", "keep" (Sharp questions off but a deck prompt applies) or "" (none; always for cloze)."""
     if card.note_type()["type"] == MODEL_CLOZE:
-        return False
-    return config_ops.deck_toggle_on(cfg(), "sharp", home_deck(card), deck_ids())
+        return ""
+    return config_ops.ask_mode(cfg(), home_deck(card), deck_ids())
 
 
 def eval_card(js: str):
@@ -104,7 +104,7 @@ def on_error(err) -> str:
 
 def on_card_will_show(text: str, card, kind: str) -> str:
     if kind == "reviewQuestion" and active(card):
-        return ui.question_html(text, rewrite_enabled(card))
+        return ui.question_html(text, bool(rewrite_enabled(card)))
     if kind == "reviewAnswer" and card.id in S.verdicts:
         return ui.verdict_html(*S.verdicts[card.id], S.edit_status.get(card.id)) + text
     return text
@@ -120,9 +120,10 @@ def on_show_question(card):
     c = cfg()
     rules = deck_rules(card, c)
     S.ctx[card.id] = {"q": q, "a": a, "questions": [], "rules": rules}
-    if not rewrite_enabled(card):
+    mode = rewrite_enabled(card)
+    if not mode:
         return
-    session().request(card.id, grading.ask_prompt(q, rules), grading.parse_questions,
+    session().request(card.id, grading.ask_prompt(q, rules, sharp=mode == "sharp"), grading.parse_questions,
                       c.get("ask_timeout_s", 30), on_asked)
 
 
