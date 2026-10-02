@@ -334,7 +334,9 @@ class GeneratePage:
         submit = (f'<button class="submit" onclick="pycmd(\'aiGen:submit\')">Submit {ok} approved</button>' if ok
                   else '<button class="submit" disabled>Submit (approve cards first)</button>')
         buttons = (f'<div class="btns">'
-                   + (f'<button onclick="pycmd(\'aiGen:approve\')">Approve all ({pending})</button>' if pending else "")
+                   + (f'<button onclick="pycmd(\'aiGen:approve\')">Approve all ({pending})</button>' if pending
+                      else f'<button onclick="pycmd(\'aiGen:unapprove:{",".join(str(s["id"]) for s in staged)}\')">'
+                           f'Unapprove all ({ok})</button>')
                    + f'<button onclick="pycmd(\'aiGen:discard\')">Discard all</button>{submit}</div>'
                    f'<div class="hint">Approved cards stay here until you Submit — keep generating meanwhile.</div>')
         return f'<div class="sect stg"><h3>{TEMP} — waiting for you</h3>{"".join(out)}{buttons}</div>'

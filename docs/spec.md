@@ -160,3 +160,4 @@ Each graded review **replaces** the card's Missed section (in the field chosen b
 - An AI `edit`/`update` of an approved staged card clears its approval, so the user sees the change before submitting. The AI sees `"approved"` on each staged card and is told to leave approved ones alone unless asked.
 - (later) Feature renamed **Generate/Update Cards** (page heading + home link), since it also updates existing cards.
 - UPDATE cards get **Show original** (right of Discard): swaps the row and its fields to the original note's current content; the button becomes **Show update**. Both versions are rendered and toggled in the page (no Python round-trip); the choice survives redraws. No button when the original was deleted.
+- Once every staged card is approved, **Approve all** turns into **Unapprove all (N)** (same spot).
