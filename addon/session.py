@@ -1,4 +1,9 @@
-"""One long-running `claude -p` stream-json process per study session. No Anki imports."""
+"""AI backends. No Anki imports.
+
+- ClaudeSession: one long-running `claude -p` stream-json process per study session.
+- CodexBackend: one `codex exec` call per message (Codex has no long-running mode).
+Both are stateless per request: every prompt carries everything the model needs.
+"""
 
 import json
 import os
@@ -22,37 +27,64 @@ ISOLATION_FLAGS = [
 ]
 
 
-# Anki started from the Dock/Start menu doesn't inherit the shell PATH, so look in the usual install spots too.
-CLAUDE_CANDIDATES = [
-    "~/.local/bin/claude",
-    "~/.claude/local/claude",
-    "/opt/homebrew/bin/claude",
-    "/usr/local/bin/claude",
-    "/usr/bin/claude",
-    "~/.local/bin/claude.exe",
-    "~/AppData/Roaming/npm/claude.cmd",
+# Codex: no shell, apps, browser, computer use, plugins or web search; read-only sandbox; no user config,
+# rules or session files. Verified on codex-cli 0.152.0.
+CODEX_ISOLATION_FLAGS = [
+    "--ephemeral",
+    "--ignore-user-config",
+    "--ignore-rules",
+    "--skip-git-repo-check",
+    "-s", "read-only",
+    "--disable", "shell_tool",
+    "--disable", "apps",
+    "--disable", "browser_use",
+    "--disable", "computer_use",
+    "--disable", "plugins",
+    "-c", 'web_search="disabled"',
 ]
+
+PROVIDERS = ("claude", "codex")
+
+# Anki started from the Dock/Start menu doesn't inherit the shell PATH, so look in the usual install spots too.
+CLI_CANDIDATES = {
+    name: [
+        f"~/.local/bin/{name}",
+        f"~/.{name}/local/{name}",
+        f"/opt/homebrew/bin/{name}",
+        f"/usr/local/bin/{name}",
+        f"/usr/bin/{name}",
+        f"~/.local/bin/{name}.exe",
+        f"~/AppData/Roaming/npm/{name}.cmd",
+    ]
+    for name in PROVIDERS
+}
+CLAUDE_CANDIDATES = CLI_CANDIDATES["claude"]
 
 
 def _is_executable(path: str) -> bool:
     return os.path.isfile(path) and os.access(path, os.X_OK)
 
 
-def find_claude(configured: str = "") -> str:
-    """configured path if set and executable, else PATH, else the usual install locations.
+def find_cli(name: str, configured: str = "") -> str:
+    """configured path if set, else PATH, else the usual install locations.
 
-    Falls back to plain "claude" so the error message names what was tried.
+    Falls back to the bare name so the error message names what was tried.
     """
     if configured and configured.strip().lower() != "auto":
         return os.path.expanduser(configured.strip())
-    found = shutil.which("claude")
+    found = shutil.which(name)
     if found:
         return found
-    for cand in CLAUDE_CANDIDATES:
+    candidates = CLAUDE_CANDIDATES if name == "claude" else CLI_CANDIDATES.get(name, [])
+    for cand in candidates:
         path = os.path.expanduser(cand)
         if _is_executable(path):
             return path
-    return "claude"
+    return name
+
+
+def find_claude(configured: str = "") -> str:
+    return find_cli("claude", configured)
 
 
 def build_command(claude_path: str, model: str, system_prompt: str) -> list:
@@ -62,9 +94,26 @@ def build_command(claude_path: str, model: str, system_prompt: str) -> list:
         "--output-format", "stream-json",
         "--verbose",
         *ISOLATION_FLAGS,
-        "--model", model,
+        *(["--model", model] if model else []),
         "--system-prompt", system_prompt,
     ]
+
+
+def build_codex_command(codex_path: str, model: str, cwd: str) -> list:
+    """The prompt goes on stdin ("-")."""
+    return [codex_path, "exec", "--json", *CODEX_ISOLATION_FLAGS,
+            *(["-m", model] if model else []), "-C", cwd, "-"]
+
+
+def make_backend(cfg: dict, system_prompt: str, cwd: str, dispatch):
+    """The configured provider's backend. `cfg` is the add-on config."""
+    provider = cfg.get("provider") or "claude"
+    model = cfg.get("model") or ""
+    if provider == "codex":
+        cmd = build_codex_command(find_cli("codex", cfg.get("codex_path", "")), model, cwd)
+        return CodexBackend(cmd, cwd, dispatch, system_prompt)
+    cmd = build_command(find_cli("claude", cfg.get("claude_path", "")), model, system_prompt)
+    return ClaudeSession(cmd, cwd, dispatch)
 
 
 class SessionError(Exception):
@@ -76,8 +125,8 @@ class SessionError(Exception):
         self.message = message
 
 
-class ClaudeSession:
-    """Serialises requests to one claude process on a worker thread.
+class _Backend:
+    """Serialises requests on a worker thread; subclasses implement _exchange and _kill.
 
     `dispatch(fn)` runs fn on the caller's thread of choice (Anki: mw.taskman.run_on_main).
     Callbacks: callback(card_id, result_dict_or_None, SessionError_or_None).
@@ -89,9 +138,7 @@ class ClaudeSession:
         self._dispatch = dispatch
         self._jobs = queue.Queue()
         self._proc = None
-        self._lines = None
         self._stderr = deque(maxlen=20)
-        self._discard = 0  # results still owed to requests that timed out
         self._gen = 0  # bumped by stop(); stale jobs and callbacks are dropped
         self._worker = threading.Thread(target=self._run, daemon=True)
         self._worker.start()
@@ -131,7 +178,7 @@ class ClaudeSession:
                     result = parse(self._exchange(prompt, timeout))
                 except ValueError:
                     try:
-                        result = parse(self._exchange(RETRY_PROMPT, timeout))
+                        result = parse(self._exchange(self._retry_prompt(prompt), timeout))
                     except ValueError as e:
                         raise SessionError("bad_reply", str(e))
             except SessionError as e:
@@ -144,6 +191,33 @@ class ClaudeSession:
                 callback(card_id, result, error)
 
         self._dispatch(fire)
+
+    def _retry_prompt(self, prompt: str) -> str:
+        """Stateless backends must resend the original prompt with the retry note."""
+        return f"{prompt}\n\n{RETRY_PROMPT}"
+
+    def _stderr_tail(self) -> str:
+        return " | ".join(list(self._stderr)[-3:])
+
+    def _kill(self):
+        proc, self._proc = self._proc, None
+        if proc is not None:
+            _terminate(proc)
+
+    def _exchange(self, prompt: str, timeout: float) -> str:
+        raise NotImplementedError
+
+
+class ClaudeSession(_Backend):
+    """One long-running claude process; the conversation persists only to save startup time."""
+
+    def __init__(self, cmd: list, cwd: str, dispatch):
+        self._lines = None
+        self._discard = 0  # results still owed to requests that timed out
+        super().__init__(cmd, cwd, dispatch)
+
+    def _retry_prompt(self, prompt: str) -> str:
+        return RETRY_PROMPT  # the original prompt is already in this conversation
 
     def _exchange(self, prompt: str, timeout: float) -> str:
         proc, lines = self._ensure_proc()
@@ -206,18 +280,64 @@ class ClaudeSession:
         for line in proc.stderr:
             self._stderr.append(line.rstrip())
 
-    def _stderr_tail(self) -> str:
-        return " | ".join(list(self._stderr)[-3:])
-
     def _drop_proc(self, proc):
         if self._proc is proc:
             self._proc = None
         _terminate(proc)
 
-    def _kill(self):
-        proc, self._proc = self._proc, None
-        if proc is not None:
+
+class CodexBackend(_Backend):
+    """One `codex exec --json` process per message; the system prompt is prepended to each prompt."""
+
+    def __init__(self, cmd: list, cwd: str, dispatch, system_prompt: str):
+        self._system_prompt = system_prompt
+        super().__init__(cmd, cwd, dispatch)
+
+    def _exchange(self, prompt: str, timeout: float) -> str:
+        try:
+            proc = subprocess.Popen(
+                self._cmd, cwd=self._cwd, text=True,
+                stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+            )
+        except OSError as e:
+            raise SessionError("unavailable", f"cannot start codex ({self._cmd[0]}): {e}")
+        self._proc = proc
+        try:
+            out, err = proc.communicate(f"{self._system_prompt}\n\n---\n\n{prompt}", timeout=timeout)
+        except subprocess.TimeoutExpired:
             _terminate(proc)
+            raise SessionError("timeout", "AI timed out.")
+        except (OSError, ValueError):  # killed by stop() mid-call
+            raise SessionError("crashed", "codex was stopped.")
+        finally:
+            if self._proc is proc:
+                self._proc = None
+        return parse_codex_output(out, err, proc.returncode)
+
+
+def parse_codex_output(out: str, err: str, returncode) -> str:
+    """Last agent_message text from `codex exec --json` events; errors -> SessionError."""
+    text, failure = None, None
+    for line in out.splitlines():
+        try:
+            obj = json.loads(line)
+        except ValueError:
+            continue
+        item = obj.get("item") or {}
+        if obj.get("type") == "item.completed" and item.get("type") == "agent_message":
+            text = item.get("text") or ""
+        elif obj.get("type") == "error":
+            failure = obj.get("message") or str(obj)
+        elif obj.get("type") == "turn.failed":
+            failure = (obj.get("error") or {}).get("message") or str(obj)
+    if failure is None and text is None and returncode not in (0, None):
+        failure = (err or "").strip()[-400:] or f"codex exited with code {returncode}"
+    if failure is not None:
+        kind = "limit" if "limit" in failure.lower() else "error"
+        raise SessionError(kind, failure)
+    if text is None:
+        raise SessionError("error", "codex returned no answer.")
+    return text
 
 
 def _terminate(proc):
