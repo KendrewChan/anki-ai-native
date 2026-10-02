@@ -82,7 +82,7 @@ def deck_rules(card, c: dict) -> list:
 
 
 def rewrite_enabled(card) -> str:
-    """Question step: "sharp", "keep" (Sharp questions off but a deck prompt applies) or "" (none; always for cloze)."""
+    """Question step: "sharp", "keep" (Rewrite question off but a deck prompt applies) or "" (none; always for cloze)."""
     if card.note_type()["type"] == MODEL_CLOZE:
         return ""
     return config_ops.ask_mode(cfg(), home_deck(card), deck_ids())

@@ -137,7 +137,7 @@ JS = """
     },
     askFailed(msg) {
       list.innerHTML = "";
-      addItem(null);  // no sharp question: answer the original, opened above
+      addItem(null);  // no rewritten question: answer the original, opened above
       sizeBoxes();
       boxes()[0].focus();
       if (orig) orig.open = true;
@@ -163,11 +163,11 @@ HINT = "Enter: next box / submit · Shift+Enter: new line · Enter with all boxe
 
 
 def question_html(original: str, rewrite: bool) -> str:
-    """Wrap Anki's rendered question. rewrite=True starts with no answer box: setQuestions adds one per sharp question.
-    rewrite=False (cloze, or sharp questions off) shows the original as the question with its box ready."""
+    """Wrap Anki's rendered question. rewrite=True starts with no answer box: setQuestions adds one per question it gets.
+    rewrite=False (cloze, or no question step) shows the original as the question with its box ready."""
     if rewrite:
         orig = f'<details id="ai-orig"><summary>Show original</summary>{original}</details>'
-        item = '<div class="ai-item"><div class="ai-q loading">Thinking of a sharp question…</div></div>'
+        item = '<div class="ai-item"><div class="ai-q loading">Preparing the questions…</div></div>'
     else:
         orig = f'<div id="ai-orig-plain">{original}</div>'
         item = f'<div class="ai-item"><textarea class="ai-ans" placeholder="{HINT}"></textarea></div>'

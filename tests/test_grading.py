@@ -175,7 +175,7 @@ def test_parse_grade_keeps_why_and_prompt_demands_consistency():
     r = grading.parse_grade('{"verdict":"partial","per_question":[{"verdict":"partial","parts":'
                             '[{"text":"a","verdict":"partial","why":" off "}]}]}')
     assert r["per_question"][0]["parts"] == [{"text": "a", "verdict": "partial", "why": "off"}]
-    assert '"correct" only if none of its parts' in grading.SYSTEM_PROMPT
+    assert "a question is no better than its weakest claim" in grading.SYSTEM_PROMPT
 
 
 def test_answer_side_keeps_model_answer_plain():
@@ -262,7 +262,7 @@ def test_verdict_html_renders_bold_and_multiline_question():
 def test_deck_rules_override_defaults_and_can_show_original():
     assert grading.parse_questions('{"questions":["a"],"show_original":true}')["show_original"] is True
     assert grading.parse_questions('{"questions":["a"],"show_original":"yes"}')["show_original"] is False
-    assert "Priority, highest first: deck rules" in grading.SYSTEM_PROMPT and "up to 8" in grading.SYSTEM_PROMPT
+    assert "Priority: deck rules" in grading.SYSTEM_PROMPT and "never more than 8" in grading.SYSTEM_PROMPT
 
 
 def test_ask_prompt_sends_front_only():
@@ -281,5 +281,5 @@ def test_card_box_answers_questions_and_edits():
 
 
 def test_prompt_explains_boxes_per_question():
-    assert "the parts of one question share a single box" in grading.SYSTEM_PROMPT
-    assert "return separate questions, not parts" in grading.SYSTEM_PROMPT
+    assert "each with ONE answer box" in grading.SYSTEM_PROMPT
+    assert "use separate questions when each needs its own box" in grading.SYSTEM_PROMPT

@@ -2,6 +2,12 @@
 
 What changed in each version, newest first. How the add-on works today is in [docs/spec.md](docs/spec.md).
 
+## v1.27 — Clearer tutor prompt; renames (2026-10-02)
+
+- The tutor prompt is rewritten as principles. It describes once what the user sees (questions, one box each, parts, hints), and the patch-style rules from earlier fixes are folded into general ones, e.g. "verdicts agree upward". Behaviour and the reply format are unchanged.
+- **Sharp questions** is now **Rewrite question**. Saying "sharp questions" in Settings still works.
+- The **Deck Prompts** section in Settings is now **Deck Settings**. It holds each deck's prompt and its switches.
+
 ## v1.26 — Ask AI about the card (2026-10-02)
 
 - The box above the verdict is now **Ask AI about this card, or to change it**. Ask a question and get an answer (bold and math rendered), or ask for a change to the note as before.

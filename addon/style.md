@@ -4,7 +4,7 @@ Plain, clear text first. Every format has one meaning; use it only when that mea
 
 ## Short texts (questions, hints, notes, feedback, missed facts)
 - Plain text. **bold** (double asterisks) marks the one key term a skimmer must not miss — at most one per text, often none.
-- No other Markdown, no HTML, no colours. No lists (a sharp question's sub-parts go in its "parts" array).
+- No other Markdown, no HTML, no colours. No lists (a question's sub-parts go in its "parts" array).
 
 ## Note fields (cards you write or edit)
 Anki HTML only, no Markdown:

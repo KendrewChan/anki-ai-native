@@ -95,7 +95,7 @@ class ConfigPage(ChatPage):
         self.history = []  # config snapshots for undo
         self.auth = "checking…"
         self.logged_in = None
-        self.selected = None  # full deck name chosen in the Deck Prompts tree
+        self.selected = None  # full deck name chosen in the Deck Settings tree
         self._probing = set()  # (provider, model) lookups in flight
 
     # --- the interface fixes.Fixer uses (cfg() comes from ChatPage) ---
@@ -365,7 +365,7 @@ class ConfigPage(ChatPage):
                  if custom else '<div style="opacity:.6">none yet</div>')
         return (f'<div class="sect"><h3>Configurations</h3><table>{table}</table></div>'
                 f'<div class="sect"><h3>Custom Generic Rules</h3>{rules}</div>'
-                f'<div class="sect"><h3>Deck Prompts</h3>{self._deck_html(cfg)}</div>')
+                f'<div class="sect"><h3>Deck Settings</h3>{self._deck_html(cfg)}</div>')
 
     def _toggle_row(self, cfg, key) -> tuple:
         """(label, On/Off button, ? help bubble — shown on hover, or on click/tab for focus)."""

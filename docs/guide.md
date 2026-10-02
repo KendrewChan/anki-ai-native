@@ -1,6 +1,6 @@
 # AI Quizzer for Anki — full guide
 
-Study in the Anki reviewer with an AI tutor (Claude Code or Codex): it turns each card into sharp questions, you type free-text answers, it grades them and recommends a button — you still press Anki's own Again / Hard / Good / Easy, so scheduling is untouched.
+Study in the Anki reviewer with an AI tutor (Claude Code or Codex): it turns each card into rewritten questions, you type free-text answers, it grades them and recommends a button — you still press Anki's own Again / Hard / Good / Easy, so scheduling is untouched.
 
 ## Requirements
 
@@ -17,7 +17,7 @@ Study in the Anki reviewer with an AI tutor (Claude Code or Codex): it turns eac
 ## Use
 
 - Under the deck list (and under **Study Now**): **AI Study: OFF · ⚙ Settings · ✨ Generate/Update Cards**. Click to turn it on or off — Anki remembers your choice next time it starts. Also in **Tools → AI Study mode**.
-- While reviewing: type answers (Enter = next box / submit, Shift+Enter = new line, Enter with all boxes empty = just show the answer). **Show original** reveals the card's real front. Sharp questions are on by default and the answer boxes appear once they arrive; hover a **?** for a hint. A question with several parts lists them as 3.1, 3.2, … with a hint on each part. Formulas show as rendered math, and the AI bolds at most one key term. To answer a deck's cards as written (faster: one AI call per card), tell Settings "no sharp questions for <deck>"; subdecks follow.
+- While reviewing: type answers (Enter = next box / submit, Shift+Enter = new line, Enter with all boxes empty = just show the answer). **Show original** reveals the card's real front. Rewrite question is on by default and the answer boxes appear once they arrive; hover a **?** for a hint. A question with several parts lists them as 3.1, 3.2, … with a hint on each part. Formulas show as rendered math, and the AI bolds at most one key term. To answer a deck's cards as written (faster: one AI call per card), tell Settings "don't rewrite questions for <deck>"; subdecks follow.
 - The verdict shows above the answer; the recommended button is outlined. Your answer is broken into bullet points: green when right, orange when partly right, red when wrong, each orange or red one with a short reason; the card's own answer keeps its normal colours. Use the **Ask AI about this card** box above the verdict to ask a question (e.g. "why is a Saga only eventually consistent?") or to change the note (e.g. "fix the typo in the back"), then press Enter. Answers appear under the box. A change redraws the card, and Edit → Undo reverts it. The card's Back keeps one **Missed (date)** section with your latest misses, replaced each review (**Missed append** in settings).
 
 ## Settings (⚙ Settings)
@@ -26,7 +26,7 @@ Type what you want in plain words — "use opus", "give me 90 seconds to answer"
 
 - **Configurations** — provider (Claude Code / Codex; "use codex"), model ("default" = the provider's), timeouts, **Missed append** On/Off button (hover the **?** for what they do), CLI path (auto-detected), login.
 - **Custom Generic Rules** — apply to every card.
-- **Deck Prompts** — one prompt per deck; subdecks inherit their parents'. Each deck's panel opens right under it and has **AI Study** and **Sharp questions** On/Off buttons (or say "no sharp questions for this deck"); AI Study off = that deck reviews normally, without AI. Switching a deck makes all its subdecks follow; switch a subdeck afterwards to make an exception, which lasts until a parent is switched again. Click a deck to see what applies to it. A deck prompt can reshape the questions, e.g. "show the question as written, then one box each for Requirements, APIs, Data Store" (up to 8). This works even with **Sharp questions** off. Off then means the AI keeps the card's question unless the deck prompt says otherwise.
+- **Deck Settings** — one prompt per deck; subdecks inherit their parents'. Each deck's panel opens right under it and has **AI Study** and **Rewrite question** On/Off buttons (or say "no rewritten questions for this deck"); AI Study off = that deck reviews normally, without AI. Switching a deck makes all its subdecks follow; switch a subdeck afterwards to make an exception, which lasts until a parent is switched again. Click a deck to see what applies to it. A deck prompt can reshape the questions, e.g. "show the question as written, then one box each for Requirements, APIs, Data Store" (up to 8). This works even with **Rewrite question** off. Off then means the AI keeps the card's question unless the deck prompt says otherwise.
 
 ## Generate/Update Cards (✨ Generate/Update Cards)
 

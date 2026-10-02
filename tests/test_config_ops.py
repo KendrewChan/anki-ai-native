@@ -120,13 +120,13 @@ def test_deck_sharp_override_inherited_innermost_wins():
     cfg = dict(BASE)
     assert config_ops.deck_toggle_source(cfg, "sharp", "Coding::Languages::Golang", DECKS) == (True, None)  # default on
     new, log, _, _ = apply([{"set_deck_sharp": {"deck": "Coding", "on": False}}], cfg=cfg, decks=DECKS)
-    assert new["deck_sharp"] == {"1": False} and log == ["✓ Sharp questions for Coding and its subdecks: off"]
+    assert new["deck_sharp"] == {"1": False} and log == ["✓ Rewrite question for Coding and its subdecks: off"]
     assert config_ops.deck_toggle_source(new, "sharp", "Coding::Languages::Golang", DECKS) == (False, "Coding")
     assert config_ops.deck_toggle_on(new, "sharp", "HSK", DECKS) is True
     new, _, _, _ = apply([{"set_deck_sharp": {"deck": "Coding::Languages", "on": "on"}}], cfg=new, decks=DECKS)
     assert config_ops.deck_toggle_source(new, "sharp", "Coding::Languages::Golang", DECKS) == (True, "Coding::Languages")
     new, log, _, _ = apply([{"set_deck_sharp": {"deck": "Coding", "on": None}}], cfg=new, decks=DECKS)
-    assert new["deck_sharp"] == {"2": True} and log == ["✓ Sharp questions for Coding: follow parent (default on)"]
+    assert new["deck_sharp"] == {"2": True} and log == ["✓ Rewrite question for Coding: follow parent (default on)"]
 
 
 def test_deck_sharp_parent_change_makes_subdecks_follow_others_kept():
@@ -165,12 +165,12 @@ def test_prune_drops_missing_decks_from_prompts_and_sharp():
 def test_config_prompt_shows_deck_sharp():
     cfg = dict(BASE, deck_sharp={"1": False})
     p = config_ops.config_prompt(cfg, "ok", "hi", decks=DECKS, selected="Coding::Languages")
-    assert "- Coding: Sharp questions off" in p and "Sharp questions off" in p
+    assert "- Coding: Rewrite question off" in p and "Rewrite question off" in p
 
 
 @pytest.mark.parametrize("change,msg", [
     ({"set_deck_sharp": {"deck": "HSK", "on": "maybe"}}, "true or false"),
-    ({"set_deck_sharp": {"deck": "HSK", "on": None}}, "no Sharp questions setting"),
+    ({"set_deck_sharp": {"deck": "HSK", "on": None}}, "no Rewrite question setting"),
     ({"set_deck_prompt": {"deck": "Golang", "prompt": "x"}}, "ambiguous"),
     ({"set_deck_prompt": {"deck": "Nope", "prompt": "x"}}, "no deck named"),
     ({"set_deck_prompt": {"deck": "HSK", "prompt": " "}}, "empty deck prompt"),
@@ -228,7 +228,7 @@ def test_toggle_flips_and_defaults_on():
 
 def test_deck_rules_outrank_general_rules():
     sp = grading.system_prompt(["grade strictly"])
-    assert "Priority, highest first: deck rules, then the user's general rules" in sp
+    assert "Priority: deck rules, then the user's general rules, then everything above" in sp
     assert "a card's deck rules win over them" in sp and "Deck rules, when given, take priority" in grading.EDIT_SYSTEM_PROMPT
 
 
@@ -239,5 +239,5 @@ def test_ask_mode_deck_prompt_applies_with_sharp_off():
     assert config_ops.ask_mode(cfg, "Other", decks) == ""
     assert config_ops.ask_mode({}, "Other", decks) == "sharp"
     keep = grading.ask_prompt("Q", [("SD", "seven sections")], sharp=False)
-    assert "Sharp questions are off for this deck" in keep and keep.index("off for this deck") < keep.index("Deck rules")
+    assert "Rewrite question is off for this deck" in keep and keep.index("off for this deck") < keep.index("Deck rules")
     assert "off for this deck" not in grading.ask_prompt("Q")
