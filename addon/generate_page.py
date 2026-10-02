@@ -88,6 +88,7 @@ document.getElementById("cmd").addEventListener("keydown", function (e) {
     pycmd("aiGen:send:" + v);
   }
 });
+document.getElementById("cmd").addEventListener("input", function () { pycmd("aiGen:draft:" + this.value); });
 setTimeout(function () { document.getElementById("cmd").focus(); }, 0);
 </script>
 """
@@ -114,6 +115,8 @@ class GeneratePage:
         self.ref = ""  # reference path as chosen (validated on every use)
         self.loaded = {}  # deck name -> [note dict] the AI asked to read
         self.busy = False
+        self.draft = ""  # unsent text in the chat box, restored when the page reopens
+        self._status = ""  # shown again if the page reopens while the AI is still working
         self._backend = None
         self._ref_cache = (None, None)  # (path, (info, is_bad)): folders aren't rescanned on every redraw
         setattr(mw, f"_{STATE}State", self._enter)
@@ -129,12 +132,12 @@ class GeneratePage:
         mw.bottomWeb.hide()
         mw.web.stdHtml(self._page_html(), context=self)
         mw.web.set_bridge_command(self._on_bridge, self)
-        self._update(None)
+        self._update(self._status if self.busy else None)
 
     def _leave(self, _new_state):
-        self._stop()
-        self.busy = False
-        self.loaded = {}  # deck contents change outside this page
+        if not self.busy:  # an in-flight message keeps running; its reply is applied and kept for later
+            self._stop()
+            self.loaded = {}  # deck contents change outside this page
         mw.bottomWeb.show()
 
     def _stop(self):
@@ -165,7 +168,10 @@ class GeneratePage:
             self._run_op(lambda col: _Result(generate_col.discard(col, ids)),
                          lambda n: self.say(f"Discarded {n} staged card{'s' if n != 1 else ''}. "
                                             "Edit → Undo brings them back."))
+        elif message.startswith("aiGen:draft:"):
+            self.draft = message[len("aiGen:draft:"):]
         elif message.startswith("aiGen:send:") and not self.busy:
+            self.draft = ""
             self._send(message[len("aiGen:send:"):])
 
     def _pick(self, folder: bool):
@@ -195,7 +201,8 @@ class GeneratePage:
         staged = generate_col.staged(mw.col)
         prompt = generate_ops.generate_prompt(text, decks, refs, self.loaded, staged, list(self.history))
         self.busy = True
-        self._update("Reading your decks, thinking…" if rounds else "Thinking — this can take a minute…")
+        self._status = "Reading your decks, thinking…" if rounds else "Thinking — this can take a minute…"
+        self._update(self._status)
         self._stop()  # fresh process per message: references are resent each time, a long chat would overflow
         self.cwd = self.cwd or tempfile.mkdtemp(prefix="anki_ai_gen_")
         cfg = mw.addonManager.getConfig(self.addon) or {}
@@ -204,10 +211,7 @@ class GeneratePage:
                               lambda _id, result, err: self._on_reply(text, rounds, staged, decks, result, err))
 
     def _on_reply(self, text, rounds, staged, decks, result, err):
-        self._stop()
-        if mw.state != STATE:
-            self.busy = False
-            return
+        self._stop()  # also when the user left meanwhile: the reply is still applied and shown on return
         if err:
             self.busy = False
             health.LAST_ERROR[(mw.addonManager.getConfig(self.addon) or {}).get("provider") or "claude"] = err.message
@@ -372,6 +376,6 @@ class GeneratePage:
             f'<button onclick="pycmd(\'aiGen:pickfile\')">Choose file…</button>'
             f'<button title="Clear" onclick="aiGen.setRef(\'\');pycmd(\'aiGen:clearref\')">×</button></div>'
             f'<div id="refinfo"></div>'
-            f'<input id="cmd" placeholder="What cards should I make or fix?">'
+            f'<input id="cmd" value="{html.escape(self.draft)}" placeholder="What cards should I make or fix?">'
             f'<div id="status"></div><div id="sections"></div></div>{JS}'
         )

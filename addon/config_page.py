@@ -92,6 +92,7 @@ document.getElementById("cmd").addEventListener("keydown", function (e) {
     pycmd("aiCfg:send:" + v);
   }
 });
+document.getElementById("cmd").addEventListener("input", function () { pycmd("aiCfg:draft:" + this.value); });
 setTimeout(function () { document.getElementById("cmd").focus(); }, 0);
 </script>
 """
@@ -111,6 +112,7 @@ class ConfigPage:
         self.auth = "checking…"
         self.logged_in = None
         self.busy = False
+        self.draft = ""  # unsent text in the chat box, restored when the page reopens
         self.selected = None  # full deck name chosen in the Deck Prompts tree
         self._probing = set()  # (provider, model) lookups in flight
         setattr(mw, f"_{STATE}State", self._enter)
@@ -127,11 +129,12 @@ class ConfigPage:
         mw.web.set_bridge_command(self._on_bridge, self)
         self._refresh_auth()
         self.fixer.check_on_open()
+        if self.busy:  # a message sent before leaving is still being answered
+            self._update("Thinking…")
 
     def _leave(self, _new_state):
-        if self.session is not None:
-            self.session.close()
-            self.session = None
+        if not self.busy:  # an in-flight message keeps running; its reply is kept for when the page reopens
+            self._drop_session()
         mw.bottomWeb.show()
 
     # --- bridge ---
@@ -160,7 +163,10 @@ class ConfigPage:
             self.fixer.revert_repair()
         elif message == "aiCfg:login":
             self._run_auth("login")
+        elif message.startswith("aiCfg:draft:"):
+            self.draft = message[len("aiCfg:draft:"):]
         elif message.startswith("aiCfg:send:") and not self.busy:
+            self.draft = ""
             self._send(message[len("aiCfg:send:"):])
 
     def _send(self, text: str):
@@ -178,6 +184,8 @@ class ConfigPage:
         if err:
             self.say(f"AI error: {err.message}", err=True)
             self._update("")
+            if mw.state != STATE:
+                self._drop_session()
             return
         rejected = []
         actions = self._apply(result["changes"], rejected)
@@ -186,6 +194,8 @@ class ConfigPage:
         for action in actions:
             self._run_auth(action)
         self._update("")
+        if mw.state != STATE:  # answered after the user left: don't keep the CLI running
+            self._drop_session()
 
     def _apply(self, changes, rejected=None) -> list:
         """Validate + save changes; rejected ones go into `rejected`. Returns requested auth actions."""
@@ -445,6 +455,6 @@ class ConfigPage:
             f'{CSS}<div id="cfg"><a class="back" onclick="pycmd(\'aiCfg:back\')">← Back</a>'
             f"<h2>AI Study settings</h2>"
             f'<div id="log">{self._log_html()}</div>'
-            f'<input id="cmd" placeholder="Tell the AI what to change…">'
+            f'<input id="cmd" value="{html.escape(self.draft)}" placeholder="Tell the AI what to change…">'
             f'<div id="status"></div><div id="sections">{self._sections_html()}</div></div>{JS}'
         )
