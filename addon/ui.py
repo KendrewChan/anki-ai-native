@@ -10,7 +10,7 @@ CSS = """
 #ai-q.loading { opacity: 0.55; font-weight: 400; font-style: italic; }
 #ai-orig { margin-bottom: 0.8em; }
 #ai-orig > summary { cursor: pointer; opacity: 0.7; font-size: 0.85em; }
-#ai-ans { width: 100%; box-sizing: border-box; min-height: 5.5em; padding: 0.6em; font: inherit;
+#ai-ans { width: 100%; box-sizing: border-box; height: 35vh; min-height: 6em; resize: vertical; padding: 0.6em; font: inherit;
           border-radius: 6px; border: 1px solid #8888; background: transparent; color: inherit; }
 #ai-status { margin-top: 0.4em; font-size: 0.85em; opacity: 0.75; min-height: 1.2em; }
 .ai-err { color: #d33; opacity: 1 !important; }
