@@ -4,7 +4,7 @@ import json
 import os
 from pathlib import Path
 
-from .config_ops import _resolve_deck
+from .config_ops import resolve_deck
 from .grading import parse_json_reply
 
 TEMP_DECK = "AI-GEN"
@@ -128,7 +128,7 @@ def generate_prompt(message: str, decks: list, refs: dict = None, existing: dict
 
     A note dict is {"id", "type", "deck", "fields": {name: html}}.
     """
-    parts = ["Decks:\n" + ("\n".join(sorted(d for d in decks if not _is_temp(d))) or "(none)")]
+    parts = ["Decks:\n" + ("\n".join(sorted(d for d in decks if not is_temp(d))) or "(none)")]
     if refs and refs["files"]:
         body = "\n\n".join(f"=== {n} ===\n{t}" for n, t in refs["files"])
         parts.append(f"Reference files ({refs['path']}):\n{body}")
@@ -171,28 +171,28 @@ def parse_generate_reply(text: str) -> dict:
             "changes": [c for c in changes if isinstance(c, dict)]}
 
 
-def _is_temp(name: str) -> bool:
+def is_temp(name: str) -> bool:
     return name == TEMP_DECK or name.startswith(TEMP_DECK + "::")
 
 
 def resolve_read(name: str, decks: list) -> str:
     """A deck the AI wants to read -> exact full name (never the temp deck)."""
-    real = {d: d for d in decks if not _is_temp(d)}
-    return _resolve_deck(name, real)
+    real = {d: d for d in decks if not is_temp(d)}
+    return resolve_deck(name, real)
 
 
 def target_deck(name, decks: list) -> str:
     """Where a new card goes: an existing deck, or a new path (existing ancestors keep their real spelling)."""
-    real = {d: d for d in decks if not _is_temp(d)}
+    real = {d: d for d in decks if not is_temp(d)}
     try:
-        return _resolve_deck(name, real)
+        return resolve_deck(name, real)
     except ValueError as e:
         if "ambiguous" in str(e):
             raise
     parts = [p.strip() for p in str(name or "").split("::")]
     if not all(parts):
         raise ValueError(f"bad deck name {name!r}")
-    if _is_temp("::".join(parts)) or parts[0].lower() == TEMP_DECK.lower():
+    if is_temp("::".join(parts)) or parts[0].lower() == TEMP_DECK.lower():
         raise ValueError(f"cards can't go into {TEMP_DECK} itself — name their real deck")
     # keep the real spelling of every existing ancestor
     for i in range(len(parts), 0, -1):

@@ -13,7 +13,6 @@ import time
 from .grading import parse_json_reply
 
 ADDON_DIR = os.path.dirname(os.path.abspath(__file__))
-BACKUP_ROOT = os.path.join(ADDON_DIR, ".repair_backup")
 REPAIRABLE = ("session.py", "health.py")  # where the CLI integration lives
 
 REPAIR_SYSTEM_PROMPT = """You repair an Anki add-on that drives an AI command-line tool (Claude Code or Codex CLI). A CLI update or change broke it. You get the error, the CLI's version and --help output, and the add-on's CLI integration source files.

@@ -35,7 +35,6 @@ def system_prompt(custom: list) -> str:
     return f"{SYSTEM_PROMPT}\n\nUser's rules (follow them unless they conflict with the JSON reply format):\n{listed}"
 
 
-RETRY_PROMPT ="Your last reply was not valid JSON. Reply again with the JSON object only."
 
 VERDICTS = ("wrong", "partial", "correct")
 

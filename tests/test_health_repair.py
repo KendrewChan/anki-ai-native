@@ -6,7 +6,7 @@ import pytest
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-from addon import health, repair  # noqa: E402
+from addon import health, repair, session  # noqa: E402
 
 HERE = os.path.dirname(__file__)
 
@@ -145,3 +145,35 @@ def test_load_patched_session_runs_code_from_disk(addon_copy, monkeypatch):
     repair.apply([edit], addon_copy)
     mod = repair.load_patched_session(addon_copy)
     assert mod.PATCHED_MARKER is True and callable(mod.probe_model)
+
+
+def test_self_check_catches_codex_rejecting_json(tmp_path):
+    """The model probe runs without --json; the self-check must still start the exact --json study command."""
+    bad = _exe(tmp_path, "codex", 'sys.stdin.read()\n'
+               'if "--json" in sys.argv: sys.stderr.write("error: unexpected argument \'--json\' found\\n"); sys.exit(2)\n'
+               'sys.stderr.write("model: fake-codex-model\\n")')
+    ok, detail = health.self_check("codex", bad, str(tmp_path))
+    assert not ok and "--json" in detail and health.classify(detail) == "incompatible"
+
+
+@pytest.mark.parametrize("msg,kind", [
+    ("Claude AI usage limit reached", "limit"),
+    ("5-hour limit reached ∙ resets 3pm", "limit"),
+    ("You've hit your limit · resets 6pm", "limit"),
+    ("Rate limit exceeded", "limit"),
+    ("prompt exceeds the context window", "error"),
+])
+def test_one_limit_rule_for_reviewer_and_settings(msg, kind):
+    assert session.error_kind(msg) == kind
+    assert (health.classify(msg) == "limit") == (kind == "limit")
+
+
+def test_study_failure_policy():
+    f, off, text = health.study_failure("timeout", "slow", 0, None)
+    assert (f, off, text) == (0, None, "AI timed out.")  # timeouts never switch AI off
+    f, off, text = health.study_failure("error", "boom", f, off)
+    assert f == 1 and off is None and text.startswith("AI error: boom")
+    f, off, text = health.study_failure("crashed", "again", f, off)
+    assert f == 2 and off == "AI unavailable: again" and "AI off until you reopen" in text
+    assert health.study_failure("limit", "quota", 0, None)[1] == "Usage limit: quota"
+    assert health.study_failure("limit", "quota", 0, "AI unavailable: x")[1] == "AI unavailable: x"  # first reason kept

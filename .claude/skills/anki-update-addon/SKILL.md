@@ -48,7 +48,7 @@ This repo is the add-on. For development, `addon/` is **symlinked** into Anki as
    python3 scripts/package.py
    D=<scratchpad>/inst; rm -rf $D; mkdir -p $D/anki_ai
    python3 -c "import zipfile;zipfile.ZipFile('dist/anki_ai.ankiaddon').extractall('$D/anki_ai')"
-   cd $D && env -i PATH=/usr/bin:/bin HOME=$HOME python3 -c "import anki_ai, anki_ai.session as s; print(s.find_claude(''))"
+   cd $D && env -i PATH=/usr/bin:/bin HOME=$HOME python3 -c "import anki_ai, anki_ai.session as s; print(s.find_cli('claude'))"
    ```
    The `env -i` PATH mimics Anki launched from the Dock (no shell PATH). The CLI must still be found.
 6. **Record**: update the affected section of `docs/spec.md` so it describes current behaviour (no "later"/"replaces" notes); add a dated entry at the top of `CHANGELOG.md`; update `docs/guide.md` (and `README.md` if the summary changes) for anything user-visible.

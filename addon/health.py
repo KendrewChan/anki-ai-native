@@ -4,7 +4,7 @@ import os
 import re
 import subprocess
 
-from .session import SessionError, probe_model
+from .session import SessionError, error_kind, startup_check
 
 VERSION = re.compile(r"\d+\.\d+\.\d+")
 INCOMPATIBLE = re.compile(
@@ -31,10 +31,9 @@ def cli_version(path: str, timeout: float = 20) -> str:
 
 
 def self_check(provider: str, path: str, cwd: str) -> tuple:
-    """(ok, detail). Starts the CLI with every flag the add-on uses and stops once it names its model —
-    proves compatibility and isolation without generating a token."""
+    """(ok, detail). session.startup_check, with every failure reported instead of raised."""
     try:
-        return True, probe_model(provider, path, "", cwd)
+        return True, startup_check(provider, path, cwd)
     except FileNotFoundError:
         return False, f"{provider} is not installed (looked for {path})"
     except SessionError as e:
@@ -48,7 +47,7 @@ def classify(message: str) -> str:
     m = message or ""
     if INCOMPATIBLE.search(m):
         return "incompatible"
-    if "usage limit" in m.lower() or "rate limit" in m.lower():
+    if error_kind(m) == "limit":
         return "limit"
     if AUTH.search(m):
         return "auth"
@@ -58,6 +57,23 @@ def classify(message: str) -> str:
         return "missing"
     return "other"
 
+
+def study_failure(kind: str, message: str, failures: int, disabled) -> tuple:
+    """The reviewer's failure policy -> (failures, disabled reason or None, text to show).
+
+    A usage limit turns AI off at once; the 2nd unavailable/crash/error does too. Timeouts never count.
+    """
+    if kind == "limit":
+        disabled = disabled or f"Usage limit: {message}"
+    elif kind in ("unavailable", "crashed", "error"):
+        failures += 1
+        if failures >= 2:
+            disabled = disabled or f"AI unavailable: {message}"
+    if disabled:
+        return failures, disabled, disabled + " — AI off until you reopen the reviewer. Open ⚙ Settings to fix it."
+    if kind == "timeout":
+        return failures, None, "AI timed out."
+    return failures, None, f"AI error: {message} — open ⚙ Settings to fix it."
 
 def update(provider: str, path: str, timeout: float = 600) -> tuple:
     """(ok, output) from `claude update` / `codex update`."""

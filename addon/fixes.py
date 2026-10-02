@@ -14,6 +14,7 @@ from aqt import mw
 from aqt.qt import QApplication
 
 from . import health, repair
+from .config_ops import TIMEOUT_RANGE
 from .session import PROVIDER_LABELS, PROVIDERS, find_cli, make_backend
 
 
@@ -133,8 +134,8 @@ class Fixer:
 
     def raise_timeouts(self):
         cfg = self._cfg()
-        ask = min(600, int(cfg.get("ask_timeout_s", 30)) * 2)
-        grade = min(600, int(cfg.get("grade_timeout_s", 60)) * 2)
+        ask = min(TIMEOUT_RANGE[1], int(cfg.get("ask_timeout_s", 30)) * 2)
+        grade = min(TIMEOUT_RANGE[1], int(cfg.get("grade_timeout_s", 60)) * 2)
         self.page._apply([{"set": {"ask_timeout_s": ask, "grade_timeout_s": grade}}])
         self.page.say(f"Doubled the time limits: {ask}s for questions, {grade}s for grading.")
 
@@ -242,7 +243,7 @@ class Fixer:
         def work():
             patched = repair.load_patched_session()
             try:
-                return True, patched.probe_model(provider, path, "", self._cwd())
+                return True, patched.startup_check(provider, path, self._cwd())
             except Exception as e:
                 return False, getattr(e, "message", str(e))
 

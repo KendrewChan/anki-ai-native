@@ -13,9 +13,9 @@ from aqt.qt import QAction
 from aqt.reviewer import Reviewer
 
 from . import config_ops, grading, health, ui
-from .config_page import ConfigPage
+from .config_page import ConfigPage, deck_ids, load_config
 from .generate_page import GeneratePage
-from .session import make_backend
+from .session import make_backend, provider_of
 
 ADDON = __name__.split(".")[0]
 
@@ -43,7 +43,7 @@ S = State()
 
 
 def cfg() -> dict:
-    return mw.addonManager.getConfig(ADDON) or {}
+    return load_config(ADDON)
 
 
 def session():
@@ -58,20 +58,15 @@ def active() -> bool:
     return S.enabled and not S.disabled
 
 
-def deck_names() -> dict:
-    """Full deck name -> deck id (str), the shape config_ops expects."""
-    return {d.name: str(d.id) for d in mw.col.decks.all_names_and_ids()}
-
-
 def deck_rules(card, c: dict) -> list:
     """Prompt chain for the card's own deck (its home deck when it sits in a filtered deck)."""
     did = card.odid or card.did
-    return config_ops.deck_chain(mw.col.decks.name(did), deck_names(), c.get("deck_prompts") or {})
+    return config_ops.deck_chain(mw.col.decks.name(did), deck_ids(), c.get("deck_prompts") or {})
 
 
 def rewrite_enabled(card) -> bool:
     """Ask the AI for sharp questions first? Not for cloze cards, nor when the user turned it off."""
-    return cfg().get("sharp_questions", True) and card.note_type()["type"] != MODEL_CLOZE
+    return config_ops.toggle_on(cfg(), "sharp_questions") and card.note_type()["type"] != MODEL_CLOZE
 
 
 def eval_card(js: str):
@@ -81,18 +76,9 @@ def eval_card(js: str):
 
 def on_error(err) -> str:
     """Apply the failure policy; return the message to show. Settings diagnoses the last error on open."""
-    health.LAST_ERROR[cfg().get("provider") or "claude"] = err.message
-    if err.kind == "limit":
-        S.disabled = f"Usage limit: {err.message}"
-    elif err.kind in ("unavailable", "crashed", "error"):
-        S.failures += 1
-        if S.failures >= 2:
-            S.disabled = f"AI unavailable: {err.message}"
-    if S.disabled:
-        return S.disabled + " — AI off until you reopen the reviewer. Open ⚙ Settings to fix it."
-    if err.kind == "timeout":
-        return "AI timed out."
-    return f"AI error: {err.message} — open ⚙ Settings to fix it."
+    health.LAST_ERROR[provider_of(cfg())] = err.message
+    S.failures, S.disabled, text = health.study_failure(err.kind, err.message, S.failures, S.disabled)
+    return text
 
 
 # --- hooks ---
@@ -179,7 +165,7 @@ def submit(payload: str):
 
 def append_missed(missed: list):
     """Replace the card's Missed section with this review's misses (or "nothing") + today's date."""
-    if not cfg().get("missed_append", True):
+    if not config_ops.toggle_on(cfg(), "missed_append"):
         return
     note = mw.reviewer.card.note()
     field = grading.pick_missed_field(list(note.keys()))
@@ -200,14 +186,7 @@ def on_show_answer(card):
 
 
 def end_session(*_args):
-    """Leaving the reviewer: kill the process; the next session rebuilds it from the current config."""
-    if S.session is not None:
-        S.session.close()
-        S.session = None
-    S.reset()
-
-
-def close(*_args):
+    """Leaving the reviewer or closing the profile: kill the process; the next session rebuilds it from config."""
     if S.session is not None:
         S.session.close()
         S.session = None
@@ -269,4 +248,4 @@ def setup():
     gui_hooks.reviewer_did_show_answer.append(on_show_answer)
     gui_hooks.webview_did_receive_js_message.append(on_js_message)
     gui_hooks.reviewer_will_end.append(end_session)
-    gui_hooks.profile_will_close.append(close)
+    gui_hooks.profile_will_close.append(end_session)

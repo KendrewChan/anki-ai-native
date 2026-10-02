@@ -1,6 +1,6 @@
 # AI Study for Anki — full guide
 
-Study in the Anki reviewer with Claude as your tutor: it turns each card into sharp questions, you type free-text answers, it grades them and recommends a button — you still press Anki's own Again / Hard / Good / Easy, so scheduling is untouched.
+Study in the Anki reviewer with an AI tutor (Claude Code or Codex): it turns each card into sharp questions, you type free-text answers, it grades them and recommends a button — you still press Anki's own Again / Hard / Good / Easy, so scheduling is untouched.
 
 ## Requirements
 
@@ -16,7 +16,7 @@ Study in the Anki reviewer with Claude as your tutor: it turns each card into sh
 
 ## Use
 
-- Under the deck list (and under **Study Now**): **AI Study: OFF · ⚙ Settings**. Click to turn it on — it is off every time Anki starts. Also in **Tools → AI Study mode**.
+- Under the deck list (and under **Study Now**): **AI Study: OFF · ⚙ Settings · ✨ Generate/Update Cards**. Click to turn it on — it is off every time Anki starts. Also in **Tools → AI Study mode**.
 - While reviewing: type answers (Enter = next box / submit, Shift+Enter = new line, Enter with all boxes empty = just show the answer). **Show original** reveals the card's real front. Click **Sharp questions** off in settings to answer each card's own question as written (faster: one AI call per card).
 - The verdict shows above the answer; the recommended button is outlined. The card's Back keeps one **Missed (date)** section with your latest misses, replaced each review (**Missed append** in settings).
 
@@ -43,8 +43,8 @@ Open **⚙ Settings**: it checks your AI CLI on open. If something's wrong you g
 
 ## Notes
 
-- Each review session keeps one `claude` process running and uses your Claude plan's usage.
-- Windows and Linux are untested. If the CLI isn't found, tell Settings its path ("claude path is /path/to/claude").
+- Studying uses your own plan's usage (Claude or ChatGPT). Claude keeps one `claude` process open per review session; Codex starts one per message.
+- Windows and Linux are untested. If the CLI isn't found, tell Settings its path ("claude path is /path/to/claude", or the same for codex).
 
 ## Development
 

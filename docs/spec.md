@@ -127,10 +127,13 @@ A failure never blocks review: Space always works.
 
 - **Self-check** (`health.self_check`):
   - Runs when Settings opens and after update or rollback.
-  - Starts the CLI with every add-on flag and stops as soon as it names its model. This proves compatibility and isolation without spending tokens.
+  - `session.startup_check` starts the real study command and stops before any answer, so a pass proves the CLI accepts every add-on flag. Claude: until its `init` event names the model. Codex: the command without `--json` until its header names the model, then the exact `--json` command until its first event.
+  - The repair flow runs the same check against the patched code.
   - A pass records `last_good[provider] = version`.
 - **Diagnosis**:
   - Reviewer errors are stored in `health.LAST_ERROR`.
+  - "Usage limit" is decided by one rule, `session.error_kind`, which both the reviewer and Settings use.
+  - The reviewer's failure policy is `health.study_failure` (pure, tested).
   - `health.classify` sorts them into incompatible | auth | limit | timeout | missing | other, which picks the fix buttons:
     - **Roll back to <last working>**
     - **Update**

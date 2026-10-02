@@ -6,7 +6,8 @@ import pytest
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-from addon.grading import RETRY_PROMPT, parse_json_reply  # noqa: E402
+from addon.grading import parse_json_reply
+from addon.session import RETRY_PROMPT  # noqa: E402
 from addon.session import ClaudeSession  # noqa: E402
 
 FAKE = [sys.executable, os.path.join(os.path.dirname(__file__), "fake_claude.py")]
@@ -81,19 +82,19 @@ def test_stop_drops_pending_callbacks(sess):
     assert fired == []
 
 
-def test_find_claude_prefers_configured_path():
-    from addon.session import find_claude
-    assert find_claude("~/bin/my-claude") == os.path.expanduser("~/bin/my-claude")
+def test_find_cli_prefers_configured_path():
+    from addon.session import find_cli
+    assert find_cli("claude", "~/bin/my-claude") == os.path.expanduser("~/bin/my-claude")
 
 
-def test_find_claude_checks_install_locations_when_path_is_bare(monkeypatch, tmp_path):
+def test_find_cli_checks_install_locations_when_path_is_bare(monkeypatch, tmp_path):
     from addon import session
     fake = tmp_path / "claude"
     fake.write_text("#!/bin/sh\n")
     fake.chmod(0o755)
     monkeypatch.setattr(session.shutil, "which", lambda _name: None)  # Dock-launched Anki: no shell PATH
-    monkeypatch.setattr(session, "CLAUDE_CANDIDATES", ["/nope/claude", str(fake)])
-    assert session.find_claude("") == str(fake)
-    assert session.find_claude("auto") == str(fake)
-    monkeypatch.setattr(session, "CLAUDE_CANDIDATES", [])
-    assert session.find_claude("") == "claude"
+    monkeypatch.setitem(session.CLI_CANDIDATES, "claude", ["/nope/claude", str(fake)])
+    assert session.find_cli("claude", "") == str(fake)
+    assert session.find_cli("claude", "auto") == str(fake)
+    monkeypatch.setitem(session.CLI_CANDIDATES, "claude", [])
+    assert session.find_cli("claude", "") == "claude"

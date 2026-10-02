@@ -14,7 +14,7 @@ import subprocess
 import threading
 from collections import deque
 
-from .grading import RETRY_PROMPT
+RETRY_PROMPT = "Your last reply was not valid JSON. Reply again with the JSON object only."
 
 # Isolation: no user/project settings, hooks, plugins, CLAUDE.md, MCP servers or tools.
 # (--bare would be stricter but cannot use subscription/OAuth login.)
@@ -44,7 +44,18 @@ CODEX_ISOLATION_FLAGS = [
     "-c", 'web_search="disabled"',
 ]
 
-PROVIDERS = ("claude", "codex")
+PROVIDERS = ("claude", "codex")  # the first one is the default
+CLAUDE_ALIASES = ("haiku", "sonnet", "opus", "fable")  # Claude Code's own model names
+LIMIT = re.compile(r"usage limit|rate limit|limit reached|hit your limit", re.I)
+
+
+def provider_of(cfg: dict) -> str:
+    return cfg.get("provider") or PROVIDERS[0]
+
+
+def error_kind(message: str) -> str:
+    """"limit" for a plan usage/rate limit, else "error". The one rule the reviewer and Settings share."""
+    return "limit" if LIMIT.search(message or "") else "error"
 
 # Anki started from the Dock/Start menu doesn't inherit the shell PATH, so look in the usual install spots too.
 CLI_CANDIDATES = {
@@ -59,7 +70,6 @@ CLI_CANDIDATES = {
     ]
     for name in PROVIDERS
 }
-CLAUDE_CANDIDATES = CLI_CANDIDATES["claude"]
 
 
 def _is_executable(path: str) -> bool:
@@ -76,16 +86,11 @@ def find_cli(name: str, configured: str = "") -> str:
     found = shutil.which(name)
     if found:
         return found
-    candidates = CLAUDE_CANDIDATES if name == "claude" else CLI_CANDIDATES.get(name, [])
-    for cand in candidates:
+    for cand in CLI_CANDIDATES.get(name, []):
         path = os.path.expanduser(cand)
         if _is_executable(path):
             return path
     return name
-
-
-def find_claude(configured: str = "") -> str:
-    return find_cli("claude", configured)
 
 
 def build_command(claude_path: str, model: str, system_prompt: str) -> list:
@@ -108,7 +113,7 @@ def build_codex_command(codex_path: str, model: str, cwd: str) -> list:
 
 def model_for(cfg: dict, provider: str = None) -> str:
     """The provider's own model ("" = its default). Each provider remembers its model in cfg["models"]."""
-    active = cfg.get("provider") or "claude"
+    active = provider_of(cfg)
     provider = provider or active
     models = cfg.get("models")
     if isinstance(models, dict) and provider in models:
@@ -118,7 +123,7 @@ def model_for(cfg: dict, provider: str = None) -> str:
 
 def make_backend(cfg: dict, system_prompt: str, cwd: str, dispatch):
     """The configured provider's backend. `cfg` is the add-on config."""
-    provider = cfg.get("provider") or "claude"
+    provider = provider_of(cfg)
     model = model_for(cfg)
     if provider == "codex":
         cmd = build_codex_command(find_cli("codex", cfg.get("codex_path", "")), model, cwd)
@@ -262,8 +267,7 @@ class ClaudeSession(_Backend):
                 continue
             text = obj.get("result") or obj.get("subtype") or ""
             if obj.get("is_error"):
-                kind = "limit" if "limit" in text.lower() else "error"
-                raise SessionError(kind, text or "Claude returned an error.")
+                raise SessionError(error_kind(text), text or "Claude returned an error.")
             return text
 
     def _ensure_proc(self):
@@ -347,8 +351,7 @@ def parse_codex_output(out: str, err: str, returncode) -> str:
     if failure is None and text is None and returncode not in (0, None):
         failure = (err or "").strip()[-400:] or f"codex exited with code {returncode}"
     if failure is not None:
-        kind = "limit" if "limit" in failure.lower() else "error"
-        raise SessionError(kind, failure)
+        raise SessionError(error_kind(failure), failure)
     if text is None:
         raise SessionError("error", "codex returned no answer.")
     return text
@@ -418,16 +421,56 @@ def resolved_model(provider: str, configured: str):
 def probe_model(provider: str, path: str, configured: str, cwd: str, timeout: float = 30) -> str:
     """Start the CLI just far enough to learn which model it will use, then stop it.
 
-    Both CLIs announce the model before calling it: Claude in its stream-json init event,
-    Codex in the stderr header of a plain (non --json) `codex exec`.
+    Both CLIs announce the model before calling it: Claude in its stream-json init event (the real study
+    command), Codex in the stderr header of the study command without --json (its JSON events omit the model).
     """
     if provider == "codex":
-        cmd = [path, "exec", *CODEX_ISOLATION_FLAGS, *(["-m", configured] if configured else []), "-C", cwd, "-"]
-        stream, prompt = "stderr", "Reply with: ok"
+        cmd = [a for a in build_codex_command(path, configured, cwd) if a != "--json"]
+        name = _watch("codex", cmd, cwd, "Reply with: ok", "stderr", timeout, _codex_model)
     else:
-        cmd = build_command(path, configured, "Reply with: ok")
-        stream = "stdout"
         prompt = json.dumps({"type": "user", "message": {"role": "user", "content": "ok"}}) + "\n"
+        name = _watch("claude", build_command(path, configured, "Reply with: ok"), cwd, prompt, "stdout", timeout,
+                      _claude_model, close_stdin=False)
+    remember_model(provider, configured, name)
+    return name
+
+
+def startup_check(provider: str, path: str, cwd: str) -> str:
+    """Start the provider's real study command(s) and stop before any answer; -> the model name.
+
+    Proves the CLI still accepts every flag the add-on uses. Raises SessionError (or OSError if missing).
+    """
+    name = probe_model(provider, path, "", cwd)
+    if provider == "codex":  # the model probe runs without --json, so also start the exact --json command
+        _check_codex_json(path, cwd)
+    return name
+
+
+def _check_codex_json(path: str, cwd: str, timeout: float = 30):
+    """Start `codex exec --json` exactly as studying does and stop at its first event."""
+    _watch("codex", build_codex_command(path, "", cwd), cwd, "Reply with: ok", "stdout", timeout,
+           lambda line: "thread.started" if '"thread.started"' in line else None)
+
+
+def _codex_model(line: str):
+    m = CODEX_MODEL_LINE.match(line)
+    return m and m.group(1)
+
+
+def _claude_model(line: str):
+    try:
+        obj = json.loads(line)
+    except ValueError:
+        return None
+    return obj.get("type") == "system" and obj.get("subtype") == "init" and obj.get("model") or None
+
+
+def _watch(name: str, cmd: list, cwd: str, stdin_text: str, stream: str, timeout: float, match,
+           close_stdin: bool = True) -> str:
+    """Run cmd until a line of `stream` makes match(line) truthy; return that value and stop the process.
+
+    Claude's stream-json input keeps stdin open (close_stdin=False); codex reads the whole prompt first.
+    """
     proc = subprocess.Popen(cmd, cwd=cwd, text=True, stdin=subprocess.PIPE,
                             stdout=subprocess.PIPE, stderr=subprocess.PIPE)
     found, seen = [], deque(maxlen=5)
@@ -435,26 +478,17 @@ def probe_model(provider: str, path: str, configured: str, cwd: str, timeout: fl
     def read():
         for line in getattr(proc, stream):
             seen.append(line.strip())
-            if provider == "codex":
-                m = CODEX_MODEL_LINE.match(line)
-                if m:
-                    found.append(m.group(1))
-                    return
-            else:
-                try:
-                    obj = json.loads(line)
-                except ValueError:
-                    continue
-                if obj.get("type") == "system" and obj.get("subtype") == "init" and obj.get("model"):
-                    found.append(obj["model"])
-                    return
+            hit = match(line)
+            if hit:
+                found.append(hit)
+                return
 
     reader = threading.Thread(target=read, daemon=True)
     reader.start()
     try:
-        proc.stdin.write(prompt)
+        proc.stdin.write(stdin_text)
         proc.stdin.flush()
-        if provider == "codex":
+        if close_stdin:
             proc.stdin.close()
     except (BrokenPipeError, OSError):
         pass
@@ -466,15 +500,11 @@ def probe_model(provider: str, path: str, configured: str, cwd: str, timeout: fl
         except (OSError, ValueError):
             rest = ""
         tail = " | ".join(x for x in [*seen, *rest.strip().splitlines()[-3:]] if x)[-400:]
-        raise SessionError("error", f"{provider} did not start: {tail or 'no output'}")
-    remember_model(provider, configured, found[0])
+        raise SessionError("error", f"{name} did not start: {tail or 'no output'}")
     return found[0]
 
 
 # --- live model list for the Settings dropdown (fetched on click, never stored) ---
-
-CLAUDE_ALIASES = ("haiku", "sonnet", "opus", "fable")  # Claude Code's own model names
-
 
 def list_models(provider: str, path: str, cwd: str, timeout: float = 30) -> list:
     """[(value, label)] the CLI offers right now. Codex: its catalog; Claude: what each alias resolves to."""

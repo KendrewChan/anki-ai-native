@@ -4,7 +4,7 @@ Every action does a few batched collection ops (not one per card): Anki keeps on
 custom undo entry that groups an action must still be in the queue when it is merged.
 """
 
-from .generate_ops import TEMP_DECK
+from .generate_ops import TEMP_DECK, is_temp
 
 TAG = "ai_generate"
 OF = "ai_generate_of_"  # + original note id, on a staged copy that updates that note
@@ -151,7 +151,7 @@ def apply_ops(col, ops) -> tuple:
 
 def _cleanup(col):
     """Remove AI-GEN subdecks left without cards, and AI-GEN itself once empty — in one removal."""
-    temp = [d.name for d in col.decks.all_names_and_ids() if d.name == TEMP_DECK or d.name.startswith(TEMP_DECK + "::")]
+    temp = [d.name for d in col.decks.all_names_and_ids() if is_temp(d.name)]
     empty = {n for n in temp if not col.find_cards(_search_deck(col, n))}
     top = [n for n in empty if "::".join(n.split("::")[:-1]) not in empty]  # a removed parent takes its children
     if top:

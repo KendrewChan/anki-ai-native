@@ -10,9 +10,9 @@ from aqt.operations import CollectionOp
 from aqt.qt import QFileDialog
 
 from . import generate_col, generate_ops, health
-from .config_page import CSS as CONFIG_CSS
+from .config_page import CSS as CONFIG_CSS, deck_ids, load_config
 from .grading import strip_html
-from .session import make_backend
+from .session import make_backend, provider_of
 
 STATE = "aiStudyGenerate"
 TEMP = html.escape(generate_ops.TEMP_DECK)
@@ -198,7 +198,7 @@ class GeneratePage:
             except ValueError as e:
                 self.say(f"Reference: {e}", err=True)
                 return
-        decks = self._decks()
+        decks = list(deck_ids())
         staged = generate_col.staged(mw.col)
         prompt = generate_ops.generate_prompt(text, decks, refs, self.loaded, staged, list(self.history))
         self.busy = True
@@ -206,8 +206,7 @@ class GeneratePage:
         self._update(self._status)
         self._stop()  # fresh process per message: references are resent each time, a long chat would overflow
         self.cwd = self.cwd or tempfile.mkdtemp(prefix="anki_ai_gen_")
-        cfg = mw.addonManager.getConfig(self.addon) or {}
-        self._backend = make_backend(cfg, generate_ops.GENERATE_SYSTEM_PROMPT, self.cwd, mw.taskman.run_on_main)
+        self._backend = make_backend(load_config(self.addon), generate_ops.GENERATE_SYSTEM_PROMPT, self.cwd, mw.taskman.run_on_main)
         self._backend.request(0, prompt, generate_ops.parse_generate_reply, TIMEOUT_S,
                               lambda _id, result, err: self._on_reply(text, rounds, staged, decks, result, err))
 
@@ -215,7 +214,7 @@ class GeneratePage:
         self._stop()  # also when the user left meanwhile: the reply is still applied and shown on return
         if err:
             self.busy = False
-            health.LAST_ERROR[(mw.addonManager.getConfig(self.addon) or {}).get("provider") or "claude"] = err.message
+            health.LAST_ERROR[provider_of(load_config(self.addon))] = err.message
             self.say(f"AI error: {err.message} — open ⚙ Settings to fix it.", err=True)
             return
         rejected = []
@@ -267,9 +266,6 @@ class GeneratePage:
                  + " Edit → Undo reverses this.")
 
     # --- rendering ---
-
-    def _decks(self) -> list:
-        return [d.name for d in mw.col.decks.all_names_and_ids()]
 
     def say(self, text: str, err: bool = False):
         self.replies.append((text, "err" if err else "ai"))

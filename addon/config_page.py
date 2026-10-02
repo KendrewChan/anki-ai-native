@@ -6,17 +6,26 @@ import subprocess
 import tempfile
 import threading
 
+from collections import deque
+
 from aqt import mw
 
 from . import config_ops
-from collections import deque
-
 from .fixes import Fixer
-
 from .session import (PROVIDER_LABELS, auth_command, find_cli, list_models, make_backend, model_for,
-                      probe_model, read_auth_status, resolved_model)
+                      probe_model, provider_of, read_auth_status, resolved_model)
 
 STATE = "aiStudyConfig"
+
+
+def load_config(addon: str) -> dict:
+    """The user's saved settings. Keys added after they were saved are missing: read them with defaults."""
+    return mw.addonManager.getConfig(addon) or {}
+
+
+def deck_ids() -> dict:
+    """Full deck name -> deck id (str), the shape config_ops expects."""
+    return {d.name: str(d.id) for d in mw.col.decks.all_names_and_ids()}
 
 CSS = """
 <style>
@@ -192,7 +201,7 @@ class ConfigPage:
         provider, _path = self._provider(cfg)
         in_use = resolved_model(provider, model_for(cfg)) or (cfg.get("resolved_models") or {}).get(
             f"{provider}:{model_for(cfg)}")
-        prompt = config_ops.config_prompt(cfg, self.auth, text, self._decks(), self.selected, in_use)
+        prompt = config_ops.config_prompt(cfg, self.auth, text, deck_ids(), self.selected, in_use)
         self._session(cfg).request(0, prompt, config_ops.parse_config_reply, 90, self._on_reply)
 
     def _on_reply(self, _id, result, err):
@@ -216,7 +225,7 @@ class ConfigPage:
     def _apply(self, changes, rejected=None) -> list:
         """Validate + save changes; rejected ones go into `rejected`. Returns requested auth actions."""
         cfg = self._cfg()
-        decks = self._decks()
+        decks = deck_ids()
         new, log, auth = config_ops.apply_changes(cfg, changes, self.history, decks=decks)
         new = config_ops.prune_deck_prompts(new, set(decks.values()))
         if rejected is not None:
@@ -225,7 +234,7 @@ class ConfigPage:
             mw.addonManager.writeConfig(self.addon, new)
             self.on_config_changed()
             self._drop_session()
-            if (new.get("provider") or "claude") != (cfg.get("provider") or "claude"):
+            if provider_of(new) != provider_of(cfg):
                 self._refresh_auth()
         return auth
 
@@ -245,7 +254,7 @@ class ConfigPage:
 
     def _provider(self, cfg=None) -> tuple:
         cfg = cfg or self._cfg()
-        provider = cfg.get("provider") or "claude"
+        provider = provider_of(cfg)
         return provider, find_cli(provider, cfg.get(f"{provider}_path", ""))
 
     def _refresh_auth(self):
@@ -354,11 +363,8 @@ class ConfigPage:
 
     # --- rendering ---
 
-    def _decks(self) -> dict:
-        return {d.name: str(d.id) for d in mw.col.decks.all_names_and_ids()}
-
     def _cfg(self) -> dict:
-        return mw.addonManager.getConfig(self.addon) or {}
+        return load_config(self.addon)
 
     def _update(self, status):
         if mw.state != STATE:
@@ -442,7 +448,7 @@ class ConfigPage:
 
 
     def _deck_html(self, cfg) -> str:
-        decks = self._decks()
+        decks = deck_ids()
         prompts = cfg.get("deck_prompts") or {}
         names = sorted(decks, key=lambda n: n.lower())
         sel = self.selected if self.selected in decks else None

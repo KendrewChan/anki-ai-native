@@ -39,7 +39,7 @@ For development, symlink `addon/` into Anki's `addons21/anki_ai` instead.
 ## Test
 
 ```bash
-pytest tests
+pytest tests        # or without installing pytest: uvx pytest tests
 ```
 
 ## More

@@ -2,6 +2,13 @@
 
 What changed in each version, newest first. How the add-on works today is in [docs/spec.md](docs/spec.md).
 
+## v1.10.1 — Cleanup (2026-10-02)
+
+- Fix: the Codex self-check now also starts the exact `--json` study command, so a CLI that rejects it can no longer pass Settings while studying fails. AI repair verifies with the same check.
+- Fix: one rule decides "usage limit" for both the reviewer and Settings (they used to disagree).
+- Single sources for the provider list, Claude model names, default provider, deck lookup and config loading; the reviewer's failure policy is now a tested function.
+- Provider-neutral wording in the Settings AI prompt and the guide.
+
 ## v1.10 — Sharp questions on/off (2026-10-02)
 
 - New setting `sharp_questions` (default on; chat: "turn off sharp questions"). Off = every card behaves like a cloze card: no ask call, one answer box, one AI call per card. Configs saved before the setting existed count as on.

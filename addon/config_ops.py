@@ -4,10 +4,8 @@ import json
 import os
 
 from .grading import parse_json_reply
-from .session import model_for
+from .session import CLAUDE_ALIASES, PROVIDERS, model_for, provider_of
 
-MODEL_ALIASES = ("haiku", "sonnet", "opus", "fable")
-PROVIDERS = ("claude", "codex")  # keep in sync with session.PROVIDERS
 TIMEOUT_RANGE = (5, 600)
 
 SETTINGS = {
@@ -44,7 +42,7 @@ def toggle_change(cfg: dict, key: str) -> dict:
     return {"set": {key: not toggle_on(cfg, key)}}
 
 
-CONFIG_SYSTEM_PROMPT = """You manage the settings of an Anki add-on that uses Claude as a flashcard tutor. The user talks to you in plain language; you turn requests into changes.
+CONFIG_SYSTEM_PROMPT = """You manage the settings of an Anki add-on that uses an AI CLI (Claude Code or Codex) as a flashcard tutor. The user talks to you in plain language; you turn requests into changes.
 
 Settings you can change (key: meaning):
 """ + "\n".join(f"- {k}: {v}" for k, v in SETTINGS.items()) + """
@@ -65,8 +63,8 @@ A change is one of:
 {"set_deck_prompt": {"deck": "<full deck name>", "prompt": "<the whole prompt>"}}
 {"clear_deck_prompt": "<full deck name>"}
 {"undo": true}        — revert the user's previous change
-{"login": true}       — sign in to Claude (opens the browser)
-{"logout": true}      — also signs the user out of Claude Code on this computer; only when they explicitly ask to log out
+{"login": true}       — sign in to the current provider's CLI (opens the browser)
+{"logout": true}      — also signs the user out of that CLI on this computer; only when they explicitly ask to log out
 
 Models: you cannot see which models the user's plan offers, and your own knowledge of model names is out of date. Never list, guess or recommend model names. If asked what models exist, tell the user to click the Model dropdown in Configurations — it loads the live list from their CLI. If the user names a model, set it exactly as given.
 
@@ -121,7 +119,7 @@ def prune_deck_prompts(cfg: dict, deck_ids: set) -> dict:
     return cfg if kept == prompts else dict(cfg, deck_prompts=kept)
 
 
-def _resolve_deck(name, decks: dict) -> str:
+def resolve_deck(name, decks: dict) -> str:
     """Deck name from the AI -> exact full name. Exact, then case-insensitive, then unique last component."""
     name = str(name or "").strip()
     if name in decks:
@@ -156,12 +154,12 @@ def _validate(key: str, value, is_executable, provider: str = "claude"):
         if v.lower() in ("", "default"):
             return ""
         if provider == "codex":
-            if v in MODEL_ALIASES or v.startswith("claude-") or " " in v:
+            if v in CLAUDE_ALIASES or v.startswith("claude-") or " " in v:
                 raise ValueError(f"{v!r} is not an OpenAI model id — Codex needs e.g. a gpt-… model, or default")
             return v
-        if v in MODEL_ALIASES or v.startswith("claude-"):
+        if v in CLAUDE_ALIASES or v.startswith("claude-"):
             return v
-        raise ValueError(f"unknown model {v!r} — use {', '.join(MODEL_ALIASES)} or a claude-… id")
+        raise ValueError(f"unknown model {v!r} — use {', '.join(CLAUDE_ALIASES)} or a claude-… id")
     if key in ("ask_timeout_s", "grade_timeout_s"):
         try:
             v = int(value)
@@ -210,7 +208,7 @@ def apply_changes(cfg: dict, changes: list, history: list, is_executable=None, d
             elif "set" in ch:
                 items = sorted((ch["set"] or {}).items(), key=lambda kv: kv[0] != "provider")
                 for key, value in items:
-                    provider = new.get("provider") or "claude"
+                    provider = provider_of(new)
                     try:
                         v = _validate(key, value, is_executable, provider)
                     except ValueError as e:
@@ -244,14 +242,14 @@ def apply_changes(cfg: dict, changes: list, history: list, is_executable=None, d
                 log.append(f'✓ removed custom rule {i}: "{removed}"')
             elif "set_deck_prompt" in ch:
                 spec = ch["set_deck_prompt"] if isinstance(ch["set_deck_prompt"], dict) else {}
-                name = _resolve_deck(spec.get("deck"), decks or {})
+                name = resolve_deck(spec.get("deck"), decks or {})
                 prompt = str(spec.get("prompt", "")).strip()
                 if not prompt:
                     raise ValueError("empty deck prompt — ask to clear it instead")
                 new["deck_prompts"] = dict(new.get("deck_prompts") or {}, **{str(decks[name]): prompt})
                 log.append(f'✓ prompt for {name}: "{prompt}"')
             elif "clear_deck_prompt" in ch:
-                name = _resolve_deck(ch["clear_deck_prompt"], decks or {})
+                name = resolve_deck(ch["clear_deck_prompt"], decks or {})
                 prompts = dict(new.get("deck_prompts") or {})
                 if prompts.pop(str(decks[name]), None) is None:
                     raise ValueError(f"{name} has no prompt")
