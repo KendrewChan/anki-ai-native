@@ -18,7 +18,7 @@ Study in the Anki reviewer with Claude as your tutor: it turns each card into sh
 
 - Under the deck list (and under **Study Now**): **AI Study: OFF · ⚙ Settings**. Click to turn it on — it is off every time Anki starts. Also in **Tools → AI Study mode**.
 - While reviewing: type answers (Enter = next box / submit, Shift+Enter = new line, Enter with all boxes empty = just show the answer). **Show original** reveals the card's real front.
-- The verdict shows above the answer; the recommended button is outlined. Missed facts are appended to the card's Back (turn off in settings).
+- The verdict shows above the answer; the recommended button is outlined. The card's Back keeps one **Missed (date)** section with your latest misses, replaced each review (turn off in settings).
 
 ## Settings (⚙ Settings)
 
