@@ -1,4 +1,4 @@
-"""Anki wiring: reviewer hooks, the pycmd bridge, Missed append. Only module that imports aqt."""
+"""Anki wiring: reviewer hooks, pycmd bridge, Missed append, main-page toggle + settings link."""
 
 import datetime
 import json
@@ -6,10 +6,14 @@ import tempfile
 
 from anki.consts import MODEL_CLOZE
 from aqt import gui_hooks, mw
+from aqt.deckbrowser import DeckBrowser
 from aqt.operations.note import update_note
+from aqt.overview import Overview
+from aqt.qt import QAction
 from aqt.reviewer import Reviewer
 
 from . import grading, ui
+from .config_page import ConfigPage
 from .session import ClaudeSession, build_command
 
 ADDON = __name__.split(".")[0]
@@ -17,8 +21,11 @@ ADDON = __name__.split(".")[0]
 
 class State:
     def __init__(self):
+        self.enabled = False  # AI Study mode; off at every Anki start
         self.session = None
         self.cwd = None
+        self.page = None
+        self.action = None
         self.reset()
 
     def reset(self):
@@ -41,9 +48,14 @@ def session() -> ClaudeSession:
     if S.session is None:
         c = cfg()
         S.cwd = S.cwd or tempfile.mkdtemp(prefix="anki_ai_")
-        cmd = build_command(c.get("claude_path", "claude"), c.get("model", "sonnet"), grading.SYSTEM_PROMPT)
+        cmd = build_command(c.get("claude_path", "claude"), c.get("model", "sonnet"),
+                            grading.system_prompt(c.get("custom")))
         S.session = ClaudeSession(cmd, S.cwd, mw.taskman.run_on_main)
     return S.session
+
+
+def active() -> bool:
+    return S.enabled and not S.disabled
 
 
 def rewrite_enabled(card) -> bool:
@@ -73,7 +85,7 @@ def on_error(err) -> str:
 # --- hooks ---
 
 def on_card_will_show(text: str, card, kind: str) -> str:
-    if kind == "reviewQuestion" and not S.disabled:
+    if kind == "reviewQuestion" and active():
         return ui.question_html(text, rewrite_enabled(card))
     if kind == "reviewAnswer" and card.id in S.verdicts:
         return ui.verdict_html(*S.verdicts[card.id]) + text
@@ -83,7 +95,7 @@ def on_card_will_show(text: str, card, kind: str) -> str:
 def on_show_question(card):
     S.card_id = card.id
     S.verdicts.pop(card.id, None)
-    if S.disabled:
+    if not active():
         return
     q = grading.strip_html(card.question())
     a = grading.strip_html(grading.answer_only(card.answer()))
@@ -107,7 +119,15 @@ def on_asked(card_id, result, err):
 
 
 def on_js_message(handled, message: str, context):
-    if not isinstance(context, Reviewer) or not message.startswith("aiStudy:"):
+    if not message.startswith("aiStudy:"):
+        return handled
+    if isinstance(context, (DeckBrowser, Overview)):
+        if message == "aiStudy:toggle":
+            set_enabled(not S.enabled)
+        elif message == "aiStudy:settings":
+            S.page.open()
+        return (True, None)
+    if not isinstance(context, Reviewer):
         return handled
     if message == "aiStudy:reveal":
         if mw.reviewer.state == "question":
@@ -120,7 +140,7 @@ def on_js_message(handled, message: str, context):
 def submit(payload: str):
     card_id = S.card_id
     ctx = S.ctx.get(card_id)
-    if ctx is None or S.disabled:
+    if ctx is None or not active():
         mw.reviewer._showAnswer()
         return
     answers = [str(a) for a in json.loads(payload)]
@@ -163,8 +183,10 @@ def on_show_answer(card):
 
 
 def end_session(*_args):
+    """Leaving the reviewer: kill the process; the next session rebuilds it from the current config."""
     if S.session is not None:
-        S.session.stop()
+        S.session.close()
+        S.session = None
     S.reset()
 
 
@@ -175,7 +197,53 @@ def close(*_args):
     S.reset()
 
 
+# --- toggle + settings link ---
+
+def set_enabled(on: bool):
+    S.enabled = on
+    if not on:
+        end_session()
+    if S.action is not None:
+        S.action.setChecked(on)
+    if mw.state == "deckBrowser":
+        mw.deckBrowser.refresh()
+    elif mw.state == "overview":
+        mw.overview.refresh()
+
+
+def controls_html() -> str:
+    on = "ON" if S.enabled else "OFF"
+    color = "#27864a" if S.enabled else "#888"
+    return (
+        '<div style="margin:1em auto;text-align:center;font-size:0.95em">'
+        f'<a href=# onclick="pycmd(\'aiStudy:toggle\');return false;" style="text-decoration:none">'
+        f'AI Study: <b style="color:{color}">{on}</b></a>'
+        ' &nbsp;·&nbsp; '
+        '<a href=# onclick="pycmd(\'aiStudy:settings\');return false;">⚙ Settings</a></div>'
+    )
+
+
+def on_deck_browser(_browser, content):
+    content.stats += controls_html()
+
+
+def on_overview(_overview, content):
+    content.table += controls_html()  # right under "Study Now"
+
+
+def setup_menu():
+    S.action = QAction("AI Study mode", mw)
+    S.action.setCheckable(True)
+    S.action.setChecked(S.enabled)
+    S.action.toggled.connect(lambda on: on != S.enabled and set_enabled(on))
+    mw.form.menuTools.addAction(S.action)
+
+
 def setup():
+    S.page = ConfigPage(ADDON, end_session)
+    setup_menu()
+    gui_hooks.deck_browser_will_render_content.append(on_deck_browser)
+    gui_hooks.overview_will_render_content.append(on_overview)
     gui_hooks.card_will_show.append(on_card_will_show)
     gui_hooks.reviewer_did_show_question.append(on_show_question)
     gui_hooks.reviewer_did_show_answer.append(on_show_answer)
