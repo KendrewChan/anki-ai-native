@@ -2,6 +2,11 @@
 
 What changed in each version, newest first. How the add-on works today is in [docs/spec.md](docs/spec.md).
 
+## v1.21 — Numbered sub-questions (2026-10-02)
+
+- Sub-questions are numbered under their question (3.1, 3.2, …) instead of 1), 2), and each part has its own hint.
+- The verdict numbers its rows the same way.
+
 ## v1.20 — Colour your answer, not the model answer (2026-10-02)
 
 - When grading, the AI quotes the claims in your answer with a verdict each. The parts you got right show green, partly right orange, wrong red.

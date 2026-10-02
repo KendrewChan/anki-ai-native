@@ -19,6 +19,7 @@ This repo is the add-on. For development, `addon/` is **symlinked** into Anki as
 | `addon/main.py`, `ui.py`, `chat_page.py`, `config_page.py`, `generate_page.py` | Anki/Qt-facing: hooks, reviewer UI, shared chat-page base, ⚙ Settings, ✨ Generate/Update Cards |
 | `addon/session.py` | Long-running `claude` (stream-json) / stateless `codex exec` provider sessions |
 | `addon/grading.py`, `config_ops.py`, `generate_ops.py` | Prompt building, grading, plain-English settings ops, Generate planning (no Anki imports) |
+| `addon/style.md` | How the AI formats text (bold, note-field HTML, LaTeX), appended to every system prompt (tutor, note edit, Generate). **All formatting rules go here**, not into individual prompts |
 | `addon/generate_col.py` | Generate collection ops on the AI-GEN staging deck (takes a `Collection`, no aqt) |
 | `addon/health.py`, `fixes.py`, `state.py` | CLI version/self-check/update/rollback, fix buttons, learned facts (`user_files/state.json`) |
 | `addon/config.json` | Shipped defaults. `addon/meta.json` = **user's live settings** (gitignored) |
@@ -63,6 +64,7 @@ This repo is the add-on. For development, `addon/` is **symlinked** into Anki as
 | Importing `aqt` at module top in a logic module | Breaks tests. Only `main.py`/UI modules touch `aqt` |
 | Guessing hook/method names from docs of another Anki version | Grep the installed `.pyc` (step 2) |
 | Hard-coding model name lists | Models come live from the CLI (dropdown); don't maintain a list |
+| Adding formatting rules (bold, lists, colours, LaTeX) to one prompt in `grading.py` / `generate_ops.py` | Put them in `addon/style.md` so every prompt and both providers follow one guide. Task-specific reply shape (JSON keys) stays in the prompt |
 | Claiming "works in Anki" after tests pass | Tests use fake CLIs. Say it's unverified in Anki until the user restarts and confirms |
 | Committing `dist/`, `meta.json`, `user_files/` | All gitignored; check `git status` before committing |
 | Personal info in a commit (real deck names, `/Users/<name>` paths) | Use generic examples; the repo is public |

@@ -50,18 +50,38 @@ def test_parse_grade_rejects_bad_replies(reply):
 
 def test_parse_questions_list_capped_and_cleaned():
     r = grading.parse_questions('{"questions":[" a ","","b","c","d","e"]}')
-    assert r == {"questions": ["a", "b", "c", "d"], "hints": ["", "", "", ""]}
+    assert r["questions"] == ["a", "b", "c", "d"]
+    assert [(it["num"], it["text"], it["hint"], it["parts"]) for it in r["items"]][:2] == [("1.", "a", "", []), ("2.", "b", "", [])]
 
 
 def test_parse_questions_hints_aligned_to_questions():
     r = grading.parse_questions('{"questions":["a","b"],"hints":[" think X ","y","extra"]}')
-    assert r == {"questions": ["a", "b"], "hints": ["think X", "y"]}
-    assert grading.parse_questions('{"questions":["a","b"],"hints":["h"]}')["hints"] == ["h", ""]
-    assert "hints" in grading.SYSTEM_PROMPT
+    assert [it["hint"] for it in r["items"]] == ["think X", "y"]
+    assert [it["hint"] for it in grading.parse_questions('{"questions":["a","b"],"hints":["h"]}')["items"]] == ["h", ""]
+    assert "hints" in grading.SYSTEM_PROMPT and '"parts"' in grading.SYSTEM_PROMPT
+
+
+def test_parse_questions_parts_numbered_with_hint_per_part():
+    r = grading.parse_questions('{"questions":["Why A?",{"question":"Describe B:","parts":["x"," ","y"]}],'
+                                '"hints":["ha",["hx","hy"]]}')
+    assert r["questions"] == ["Why A?", "Describe B:\n2.1 x\n2.2 y"]
+    b = r["items"][1]
+    assert b["num"] == "2." and b["hint"] == "" and b["parts"] == [
+        {"label": "2.1", "text": "x", "hint": "hx"}, {"label": "2.2", "text": "y", "hint": "hy"}]
+    one = grading.parse_questions('{"questions":[{"question":"S","parts":["p","q"]}],"hints":["only one"]}')
+    assert one["questions"] == ["S\n1. p\n2. q"] and one["items"][0]["num"] == ""
+    assert [p["hint"] for p in one["items"][0]["parts"]] == ["only one", ""]
 
 
 def test_parse_questions_accepts_single_question_key():
-    assert grading.parse_questions('{"question":" Why? "}') == {"questions": ["Why?"], "hints": [""]}
+    r = grading.parse_questions('{"question":" Why? "}')
+    assert r["questions"] == ["Why?"] and r["items"][0] == {"num": "", "text": "Why?", "hint": "", "parts": []}
+
+
+def test_display_items_escapes_ai_text():
+    items = grading.parse_questions('{"questions":[{"question":"<b>","parts":["**k**"]}],"hints":[["<i>"]]}')["items"]
+    d = ui.display_items(items)[0]
+    assert d["text"] == "&lt;b&gt;" and d["parts"][0] == {"label": "1.", "text": "<b>k</b>", "hint": "&lt;i&gt;"}
 
 
 @pytest.mark.parametrize("reply", ['{"questions":[]}', '{"questions":[""]}', '{"other":1}'])
@@ -122,7 +142,7 @@ def test_verdict_html_per_question_rows():
     v = {"verdict": "partial", "ease": 2, "feedback": "f", "missed": ["m"],
          "per_question": [{"verdict": "correct", "note": "n1"}, {"verdict": "wrong", "note": "n2"}]}
     html = ui.verdict_html(v, ["Q one", "Q two"], ["a1", ""])
-    assert '<span class="ai-mark-correct">✓</span> Q one' in html and '<span class="ai-mark-wrong">✗</span> Q two' in html and "(blank)" in html and "<li>m</li>" in html
+    assert '<span class="ai-mark-correct">✓</span> 1. Q one' in html and '<span class="ai-mark-wrong">✗</span> 2. Q two' in html and "(blank)" in html and "<li>m</li>" in html
 
 
 def test_verdict_html_colours_wrong_red_partial_orange():
@@ -203,7 +223,7 @@ def test_verdict_html_has_edit_bar_with_status():
 
 def test_style_guide_in_every_system_prompt():
     from addon import generate_ops
-    assert "\\( ... \\)" in grading.STYLE_GUIDE and "1) " in grading.SYSTEM_PROMPT
+    assert "\\( ... \\)" in grading.STYLE_GUIDE
     for prompt in (grading.system_prompt([]), grading.system_prompt(["be terse"]), grading.EDIT_SYSTEM_PROMPT,
                    generate_ops.GENERATE_SYSTEM_PROMPT):
         assert grading.STYLE_GUIDE in prompt
@@ -223,5 +243,7 @@ def test_parse_json_reply_repairs_single_backslash_latex():
 def test_verdict_html_renders_bold_and_multiline_question():
     v = {"verdict": "correct", "ease": 3, "feedback": "**Key** fact", "missed": [],
          "per_question": [{"verdict": "correct", "note": "n"}]}
-    html = ui.verdict_html(v, ["Explain:\n1) a\n2) b"], ["x"])
-    assert "<b>Key</b> fact" in html and "Explain:\n1) a\n2) b" in html
+    html = ui.verdict_html(v, ["Explain:\n1. a\n2. b"], ["x"])
+    assert "<b>Key</b> fact" in html and "</span> Explain:\n1. a\n2. b" in html
+    two = ui.verdict_html(dict(v, per_question=v["per_question"] * 2), ["A", "B:\n2.1 x"], ["x", "y"])
+    assert "</span> 1. A" in two and "</span> 2. B:\n2.1 x" in two

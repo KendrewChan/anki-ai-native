@@ -15,9 +15,9 @@ Two kinds of message arrive:
 1. NEW CARD — you get the card's question and reference answer. Turn the question into sharp, concrete questions that force out the key facts of the reference answer. Prefer a specific scenario or "explain X and why Y" over "tell me about X". Never leak the answer, and never steer toward a different point than the reference answer makes.
    - Normally return ONE question. If the card bundles several distinct points (e.g. "X (a, b, c)" or "What is X? Why Y?"), return one question per point, at most 4.
    - If the question is already a single concrete question, return it unchanged.
-   - If one question asks for several parts, put each part on its own line, numbered: "Explain X:\n1) <part>\n2) <part>".
-   - hints: one per question, in order — a nudge of at most 12 words that points toward the idea without giving the answer.
-   Reply: {"questions": ["<question>", ...], "hints": ["<hint>", ...]}
+   - If one question asks for several parts, return it as {"question": "<stem>", "parts": ["<part>", ...]} instead of a string; don't number the parts yourself.
+   - hints: one per question, in order — a nudge of at most 12 words that points toward the idea without giving the answer. For a question with parts, its hint is a list with one hint per part.
+   Reply: {"questions": ["<question>" or {"question": "...", "parts": [...]}, ...], "hints": ["<hint>" or ["<hint per part>", ...], ...]}
 
 2. GRADE — you get the card again plus the user's free-text answer to each question asked. Judge ONLY against this card's reference answer; ignore earlier cards. Match each answer to its own question; a blank answer is wrong for that question.
    - per_question: for each question in order, {"verdict": "wrong"|"partial"|"correct", "note": "<at most 15 words>", "parts": [{"text": "<words copied exactly from the user's answer>", "verdict": "wrong"|"partial"|"correct"}, ...]}.
@@ -138,18 +138,38 @@ MAX_QUESTIONS = 4
 
 
 def parse_questions(text: str) -> dict:
+    """{"questions": [plain text per question, parts as numbered lines — for prompts and the verdict],
+        "items": [{"num", "text", "hint", "parts": [{"label", "text", "hint"}]}] — for the question side}.
+    Parts are numbered 3.1, 3.2… under question 3 (1., 2. when there is one question); hints sit on the smallest unit."""
     obj = parse_json_reply(text)
     qs = obj.get("questions", obj.get("question"))
-    if isinstance(qs, str):
+    if isinstance(qs, (str, dict)):
         qs = [qs]
     if not isinstance(qs, list):
         raise ValueError("reply has no 'questions'")
-    qs = [str(q).strip() for q in qs if str(q).strip()][:MAX_QUESTIONS]
-    if not qs:
+    hints = obj.get("hints") if isinstance(obj.get("hints"), list) else []
+    raw = []
+    for q, h in zip(qs, hints + [None] * len(qs)):
+        if isinstance(q, dict):
+            parts = q.get("parts") if isinstance(q.get("parts"), list) else []
+            stem, parts = str(q.get("question", "")).strip(), [str(p).strip() for p in parts if str(p).strip()]
+        else:
+            stem, parts = str(q or "").strip(), []
+        if stem or parts:
+            raw.append((stem, parts, h))
+    raw = raw[:MAX_QUESTIONS]
+    if not raw:
         raise ValueError("reply has no 'questions'")
-    hints = obj.get("hints")
-    hints = [str(h).strip() for h in hints] if isinstance(hints, list) else []
-    return {"questions": qs, "hints": (hints + [""] * len(qs))[:len(qs)]}  # one per question; "" = none
+    many = len(raw) > 1
+    questions, items = [], []
+    for i, (stem, parts, h) in enumerate(raw, 1):
+        hs = [str(x).strip() for x in h] if isinstance(h, list) else [str(h).strip() if h else ""]
+        labels = [f"{i}.{k}" if many else f"{k}." for k in range(1, len(parts) + 1)]
+        part_hints = (hs + [""] * len(parts))[:len(parts)]
+        items.append({"num": f"{i}." if many else "", "text": stem, "hint": "" if parts else hs[0],
+                      "parts": [{"label": lb, "text": p, "hint": ph} for lb, p, ph in zip(labels, parts, part_hints)]})
+        questions.append("\n".join([stem] + [f"{lb} {p}" for lb, p in zip(labels, parts)]).strip())
+    return {"questions": questions, "items": items}
 
 
 def parse_grade(text: str) -> dict:

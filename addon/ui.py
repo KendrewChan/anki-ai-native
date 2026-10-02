@@ -13,6 +13,7 @@ CSS = """
 #ai-orig > summary { cursor: pointer; opacity: 0.7; font-size: 0.85em; }
 .ai-item { margin-bottom: 0.9em; }
 .ai-q { font-size: 1.15em; font-weight: 600; margin: 0.2em 0 0.4em; white-space: pre-wrap; }
+.ai-part { margin: 0 0 0.3em 1.2em; font-size: 1.05em; }
 .ai-q.loading { opacity: 0.55; font-weight: 400; font-style: italic; }
 .ai-hint { position: relative; display: inline-block; margin-left: 0.4em; width: 1.2em; height: 1.2em; line-height: 1.2em;
            border-radius: 50%; border: 1px solid #8888; text-align: center; font-size: 0.7em; font-weight: 400;
@@ -78,25 +79,35 @@ JS = """
     });
   }
 
-  function addItem(question, hint) {
+  function hintIcon(hint) {
+    const help = document.createElement("span");
+    help.className = "ai-hint";
+    help.tabIndex = -1;  // focusable by click (shows the tip), but Tab still goes box to box
+    help.textContent = "?";
+    const tip = document.createElement("span");
+    tip.className = "tip";
+    tip.innerHTML = hint;
+    help.append(tip);
+    return help;
+  }
+
+  // q: {num, text, hint, parts: [{label, text, hint}]} as safe HTML from ui.display_items, or null (no label)
+  function addItem(q) {
     const item = document.createElement("div");
     item.className = "ai-item";
-    if (question !== null) {
+    if (q) {
       const label = document.createElement("div");
       label.className = "ai-q";
-      label.innerHTML = question;  // safe HTML from grading.rich (escaped; only <b> added)
-      if (hint) {
-        const help = document.createElement("span");
-        help.className = "ai-hint";
-        help.tabIndex = -1;  // focusable by click (shows the tip), but Tab still goes box to box
-        help.textContent = "?";
-        const tip = document.createElement("span");
-        tip.className = "tip";
-        tip.innerHTML = hint;
-        help.append(tip);
-        label.append(help);
-      }
+      label.innerHTML = (q.num ? q.num + " " : "") + q.text;
+      if (q.hint) label.append(hintIcon(q.hint));
       item.append(label);
+      q.parts.forEach(p => {
+        const row = document.createElement("div");
+        row.className = "ai-part";
+        row.innerHTML = p.label + " " + p.text;
+        if (p.hint) row.append(hintIcon(p.hint));
+        item.append(row);
+      });
     }
     const box = document.createElement("textarea");
     box.className = "ai-ans";
@@ -107,10 +118,10 @@ JS = """
   }
 
   window.aiStudy = {
-    setQuestions(qs, hints) {
+    setQuestions(qs) {
       if (submitted) return;
       list.innerHTML = "";
-      qs.forEach((q, i) => addItem(qs.length > 1 ? (i + 1) + ". " + q : q, (hints || [])[i]));
+      qs.forEach(addItem);
       sizeBoxes();
       boxes()[0].focus();
       if (window.MathJax && MathJax.typesetPromise)  // Anki typesets the card once; these arrived later
@@ -191,6 +202,12 @@ def edit_status_js(text: str, err: bool) -> str:
             "(document.getElementById('ai-edit-status'), document.querySelector('#ai-edit input'));")
 
 
+def display_items(items: list) -> list:
+    """grading.parse_questions items with the AI's text made safe HTML for setQuestions (labels are ours)."""
+    r = grading.rich
+    return [dict(it, text=r(it["text"]), hint=r(it["hint"]),
+                 parts=[dict(p, text=r(p["text"]), hint=r(p["hint"])) for p in it["parts"]]) for it in items]
+
 def verdict_html(verdict: dict, questions: list, answers: list, edit_status=None) -> str:
     """questions = what was asked (may be empty: cloze / ask failed); answers = one per box."""
     v = verdict["verdict"]
@@ -199,9 +216,10 @@ def verdict_html(verdict: dict, questions: list, answers: list, edit_status=None
     rows = []
     if questions and len(per_q) == len(questions):
         for i, (q, pq) in enumerate(zip(questions, per_q)):
+            num = f"{i + 1}. " if len(questions) > 1 else ""
             a = answers[i] if i < len(answers) else ""
             rows.append(
-                f'<div class="ai-pq"><span class="ai-pq-q"><span class="ai-mark-{pq["verdict"]}">{marks[pq["verdict"]]}</span> {grading.rich(q)}</span>'
+                f'<div class="ai-pq"><span class="ai-pq-q"><span class="ai-mark-{pq["verdict"]}">{marks[pq["verdict"]]}</span> {num}{grading.rich(q)}</span>'
                 f'{_you_html(a, pq["verdict"], pq.get("parts"))}'
                 f'<div>{grading.rich(pq["note"])}</div></div>'
             )
