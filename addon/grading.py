@@ -24,7 +24,16 @@ Two kinds of message arrive:
 
 Reply with the JSON object only. No prose, no code fences."""
 
-RETRY_PROMPT = "Your last reply was not valid JSON. Reply again with the JSON object only."
+def system_prompt(custom: list) -> str:
+    """Tutor system prompt plus the user's custom rules from the config page."""
+    rules = [r for r in (custom or []) if str(r).strip()]
+    if not rules:
+        return SYSTEM_PROMPT
+    listed = "\n".join(f"- {r}" for r in rules)
+    return f"{SYSTEM_PROMPT}\n\nUser's rules (follow them unless they conflict with the JSON reply format):\n{listed}"
+
+
+RETRY_PROMPT ="Your last reply was not valid JSON. Reply again with the JSON object only."
 
 VERDICTS = ("wrong", "partial", "correct")
 
