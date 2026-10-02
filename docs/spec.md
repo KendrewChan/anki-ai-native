@@ -89,3 +89,10 @@ Only `main.py` imports Anki; everything else is unit-tested with plain pytest.
 - AI replies `{"reply", "changes"}`; `config_ops.apply_changes` validates each change (`set` known keys with range/type checks, `add_custom`, `remove_custom`, `undo` = snapshot restore, `login`/`logout` → `claude auth login|logout`) and echoes `✓`/`✗` lines. Saved with `addonManager.writeConfig`.
 - Below: **Configurations** (login state from `claude auth status`, model, timeouts, missed append, claude path; **Log in** button when logged out) and **Custom** (numbered rules, appended to the tutor system prompt via `grading.system_prompt`).
 - The study session is rebuilt from config at each review session start, so changes apply next session.
+
+## v1.2 — deck prompts (2026-10-02)
+
+- Settings page sections: **Configurations** · **Custom Generic Rules** (every card; in the tutor system prompt) · **Deck Prompts**.
+- **Deck Prompts** shows the real Anki deck tree (collapsible; ● = has prompt). Clicking a deck selects it; a panel shows its own prompt plus inherited ones. One free-text prompt per deck, edited via the CLI (`set_deck_prompt {deck, prompt}` replaces; `clear_deck_prompt`). The AI gets the deck list, existing prompts and the selected deck; names resolve exact → case-insensitive → unique leaf name, else rejected (ambiguous / unknown).
+- Stored as `deck_prompts: {deck_id: prompt}` — survives renames; prompts of deleted decks are pruned on the next save.
+- While studying, each card sends its **own home deck's** chain (`card.odid or card.did`; root → leaf, inner wins) inside the ask/grade message, since one session mixes subdecks.
