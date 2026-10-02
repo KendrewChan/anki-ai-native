@@ -39,7 +39,7 @@ CSS = """
 #ai-edit { text-align: left; width: min(92vw, 70em); box-sizing: border-box; margin: 0 auto 0.6em; }
 #ai-edit input { width: 100%; box-sizing: border-box; padding: 0.45em 0.6em; font: inherit; font-size: 0.9em;
                  border-radius: 6px; border: 1px solid #8888; background: transparent; color: inherit; }
-#ai-edit-status { font-size: 0.85em; opacity: 0.75; min-height: 1.1em; margin-top: 0.2em; }
+#ai-edit-status { font-size: 0.9em; opacity: 0.85; min-height: 1.1em; margin-top: 0.3em; white-space: pre-wrap; }
 .ai-verdict ul { margin: 0.3em 0 0 1.2em; padding: 0; }
 </style>
 """
@@ -187,7 +187,7 @@ EDIT_JS = """
     e.preventDefault();
     pycmd("aiStudy:edit:" + box.value.trim());
     box.value = ""; box.disabled = true;
-    status.className = ""; status.textContent = "Editing the note…";
+    status.className = ""; status.textContent = "Thinking…";
   });
 })();
 </script>
@@ -198,14 +198,15 @@ def edit_bar_html(status=None) -> str:
     """Answer-side box to ask the AI to change this note. status = (text, is_error) of the last edit, or None."""
     text, err = status or ("", False)
     cls = ' class="ai-err"' if err else ""
-    return (f'<div id="ai-edit"><input placeholder="Ask AI to change this note — e.g. fix a typo, add a detail '
-            f'(Enter)"><div id="ai-edit-status"{cls}>{html.escape(text)}</div></div>{EDIT_JS}')
+    return (f'<div id="ai-edit"><input placeholder="Ask AI about this card, or to change it — e.g. why is X true? · '
+            f'add an example to the back (Enter)"><div id="ai-edit-status"{cls}>{grading.rich(text)}</div></div>{EDIT_JS}')
 
 
 def edit_status_js(text: str, err: bool) -> str:
-    """Show an edit result in the open answer side and re-enable the box."""
+    """Show the AI's reply (answer or edit result) in the open answer side, typeset any math, re-enable the box."""
     return ("(function(s, b){ if (!s) return; "
-            f"s.textContent = {json.dumps(text)}; s.className = {json.dumps('ai-err' if err else '')}; "
+            f"s.innerHTML = {json.dumps(grading.rich(text))}; s.className = {json.dumps('ai-err' if err else '')}; "
+            "if (window.MathJax && MathJax.typesetPromise) MathJax.typesetPromise([s]).catch(() => {}); "
             "if (b) { b.disabled = false; b.focus(); } })"
             "(document.getElementById('ai-edit-status'), document.querySelector('#ai-edit input'));")
 

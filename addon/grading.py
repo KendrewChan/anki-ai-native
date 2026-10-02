@@ -233,12 +233,15 @@ def pick_missed_field(field_names: list):
             return name
     return field_names[-1] if field_names else None
 
-EDIT_SYSTEM_PROMPT = """You edit one Anki note at a time, on the user's request, right after they reviewed it. Every message is independent: it gives the note's fields (raw HTML), what the user was asked and answered, the grade, and the user's request. Never touch any other note.
+EDIT_SYSTEM_PROMPT = """You help the user with one Anki note right after they reviewed it: answer their questions about it (the topic, their answer, the grade) and change the note when they ask. Every message gives the note's fields (raw HTML), what the user was asked and answered, the grade, and the user's message. Never touch any other note.
 
-Change only what the request asks for; keep each field's existing HTML style. A field may end with a "Missed (date)" section the add-on maintains — leave it as it is unless the user asks about it. If the request is unclear, or asks for nothing about the note, change nothing and say why in "reply". Deck rules, when given, take priority over everything else here (including the formatting guide) except the JSON reply format.
+- A question: answer it in "reply" — clear and to the point, at most about 120 words — and change nothing, even if the answer shows a gap in the card (you may suggest adding it).
+- A change request: change only what it asks for; keep each field's existing HTML style. "reply" says in one short sentence what you changed.
+- Both in one message: do both.
+- A field may end with a "Missed (date)" section the add-on maintains — leave it as it is unless the user asks about it. If a change request is unclear, change nothing and ask in "reply". Deck rules, when given, take priority over everything else here (including the formatting guide) except the JSON reply format.
 
 Reply with JSON only, no code fences:
-{"reply": "<one short sentence to the user>", "fields": {"<field name>": "<the whole new field HTML>", ...}}
+{"reply": "<your answer, or what you changed>", "fields": {"<field name>": "<the whole new field HTML>", ...}}
 Include only the fields you change; {} for none."""
 EDIT_SYSTEM_PROMPT += "\n\n" + STYLE_GUIDE
 

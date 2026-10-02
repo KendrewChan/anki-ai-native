@@ -2,6 +2,10 @@
 
 What changed in each version, newest first. How the add-on works today is in [docs/spec.md](docs/spec.md).
 
+## v1.26 — Ask AI about the card (2026-10-02)
+
+- The box above the verdict is now **Ask AI about this card, or to change it**. Ask a question and get an answer (bold and math rendered), or ask for a change to the note as before.
+
 ## v1.25 — Deck prompts apply on both sides (2026-10-02)
 
 - A deck prompt now shapes the question side even when Sharp questions is off. The AI reads the card, keeps its question unless the prompt asks for something else (sections, more boxes, showing the question), and grading follows the prompt as before. Decks without a prompt and with Sharp questions off still skip the question step.

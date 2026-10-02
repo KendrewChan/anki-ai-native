@@ -269,3 +269,12 @@ def test_ask_prompt_sends_front_only():
     p = grading.ask_prompt("Front?", [("Deck", "r")])
     assert p.startswith("NEW CARD\n\nQuestion:\nFront?") and "Reference answer" not in p
     assert "only the card's question (its front), never its answer" in grading.SYSTEM_PROMPT
+
+
+def test_card_box_answers_questions_and_edits():
+    assert "answer their questions" in grading.EDIT_SYSTEM_PROMPT and "change nothing" in grading.EDIT_SYSTEM_PROMPT
+    v = {"verdict": "correct", "ease": 3, "feedback": "f", "missed": [], "per_question": []}
+    html = ui.verdict_html(v, [], ["a"], ("Because **ordering** is per partition", False))
+    assert 'placeholder="Ask AI about this card, or to change it' in html and "Because <b>ordering</b>" in html
+    js = ui.edit_status_js("x < **y**", False)
+    assert "x &lt; <b>y</b>" in js and "innerHTML" in js
