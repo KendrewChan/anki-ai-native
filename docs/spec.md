@@ -17,10 +17,10 @@ v1 scope: free-text grading only.
 
 - One long-running `claude -p --input-format stream-json --output-format stream-json --verbose` process per review session. All cards share one conversation. No card limit.
 - Starts lazily on the first request; stops when the main window leaves the `review` state, on profile close, and on app exit.
-- **Isolated:** runs in an empty working directory, loads no user/project settings (no hooks, plugins, CLAUDE.md), no MCP servers, no tools. Exact flags verified against the installed CLI.
+- **Isolated:** runs in an empty working directory, loads no user/project settings (no hooks, plugins, CLAUDE.md), no MCP servers, no tools: `--safe-mode --setting-sources "" --strict-mcp-config --tools "" --disable-slash-commands --no-session-persistence` (verified on CLI 2.1.287; `--bare` rejected — it cannot use subscription login).
 - API (async, callbacks on the main thread):
   - `ask(card_id, question_text, answer_text)` → `{"question": str}`
-  - `grade(card_id, user_answer)` → `{"verdict": "wrong"|"partial"|"correct", "ease": 1-4, "feedback": str, "missed": [str]}`
+  - `grade(card_id, question, sharp_question, answer, user_answer)` — sends the full card again (robust if `ask` failed or was skipped, e.g. cloze) → `{"verdict": "wrong"|"partial"|"correct", "ease": 1-4, "feedback": str, "missed": [str]}`
 - One request in flight; later requests queue. Every reply is tagged with its card id; the UI drops replies whose card id is not the current card.
 - System prompt = fixed rubric: verdict → ease (wrong 1, partial 2, correct 3, correct + complete and crisp 4), Missed bullets ≤ 12 words each and only facts in the reference answer the user omitted, judge each card only against its own reference answer, reply with JSON only.
 - Config (`config.json`): `claude_path`, `model` (default `sonnet`), `missed_append` (default `true`), `ask_timeout_s` (30), `grade_timeout_s` (60).
@@ -33,7 +33,7 @@ Display-only wrapper via `gui_hooks.card_will_show`; nothing is written to the c
 - Sharp question (spinner until `ask` returns) · collapsed **Show original** with Anki's normal rendered question · text box (Enter submits, Shift+Enter newline).
 - `ask` fires when the card is shown. Submitting before it returns is allowed (queued).
 - Submit → `grade` → on reply, store verdict by card id and call `reviewer._showAnswer()`.
-- Empty box + Space → normal answer, no verdict.
+- Enter on an empty box → normal answer, no verdict (Space types into the focused box; clicking outside it and pressing Space also works).
 - Anki shortcuts must not fire while typing in the box.
 - **Cloze cards:** no rewrite; native blanked question shown; text box + grading still apply.
 
@@ -65,12 +65,12 @@ A failure never blocks review — Space always works.
 
 ```
 anki-ai/
-  addon/  __init__.py  session.py  grading.py  ui.py  config.json
+  addon/  __init__.py (loads main.py only inside Anki)  main.py (hooks)  session.py  grading.py  ui.py  config.json
   tests/  test_grading.py  test_session.py  fake_claude.py
   docs/   spec.md
 ```
 
-`grading.py` and `session.py` import nothing from Anki.
+Only `main.py` imports Anki; everything else is unit-tested with plain pytest.
 
 ## 5. Testing
 
