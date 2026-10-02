@@ -1,6 +1,6 @@
 ---
 name: anki-update-addon
-description: Use when changing, fixing, extending, testing, packaging, or releasing the "AI Study" Anki add-on in this repo (anki_ai, AI study mode in the Anki reviewer, Claude Code / Codex provider, settings page, deck prompts, Generate/Update Cards, self-check/fixes) — any edit under addon/ or a request to "update the anki plugin/add-on".
+description: Use when changing, fixing, extending, testing, packaging, or releasing the "AI Quizzer" Anki add-on in this repo (anki-ai-quizzer, package anki_ai, AI Study mode in the Anki reviewer, Claude Code / Codex provider, settings page, deck prompts, Generate/Update Cards, self-check/fixes) — any edit under addon/ or a request to "update the anki plugin/add-on".
 ---
 
 # Anki Update Add-on

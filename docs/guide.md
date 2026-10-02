@@ -1,4 +1,4 @@
-# AI Study for Anki — full guide
+# AI Quizzer for Anki — full guide
 
 Study in the Anki reviewer with an AI tutor (Claude Code or Codex): it turns each card into sharp questions, you type free-text answers, it grades them and recommends a button — you still press Anki's own Again / Hard / Good / Easy, so scheduling is untouched.
 

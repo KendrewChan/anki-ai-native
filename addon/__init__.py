@@ -1,4 +1,4 @@
-"""Anki AI Study — sharp question, free-text answer, AI grade, native Again/Hard/Good/Easy."""
+"""AI Quizzer for Anki — sharp question, free-text answer, AI grade, native Again/Hard/Good/Easy."""
 
 try:
     from aqt import mw

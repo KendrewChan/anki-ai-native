@@ -1,4 +1,4 @@
-# anki-ai-study
+# anki-ai-quizzer
 
 An Anki add-on that turns Claude Code (or Codex) into a study tutor, right inside Anki.
 

@@ -2,6 +2,10 @@
 
 What changed in each version, newest first. How the add-on works today is in [docs/spec.md](docs/spec.md).
 
+## v1.15 — Renamed to AI Quizzer (2026-10-02)
+
+- The repo is now **anki-ai-quizzer** and the add-on shows as **AI Quizzer** in Anki's add-on list. The study mode keeps its name (AI Study), and the package stays `anki_ai`, so existing installs and settings carry over.
+
 ## v1.14 — AI Study per deck; deck panel under the deck (2026-10-02)
 
 - New **AI Study** On/Off button per deck (on by default, same follow/exception rules as Sharp questions): off = that deck's cards use Anki's plain reviewer while AI Study is ON. Also via chat ("no AI for this deck").

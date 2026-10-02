@@ -1,4 +1,4 @@
-# Anki AI Study add-on — spec
+# AI Quizzer add-on for Anki — spec
 
 How the add-on works **now**. Version history is in [CHANGELOG.md](../CHANGELOG.md); the user guide is [guide.md](guide.md). When behaviour changes, update the section here and add a changelog entry.
 
