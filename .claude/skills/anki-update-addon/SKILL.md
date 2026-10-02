@@ -13,7 +13,8 @@ This repo is the add-on. For development, `addon/` is **symlinked** into Anki as
 
 | Path | Role |
 |---|---|
-| `docs/spec.md` | Design + recorded implementation decisions — read first, append decisions after |
+| `docs/spec.md` | How it works **now** — read first; edit the relevant section in place (never append history) |
+| `CHANGELOG.md` | What changed per version, newest first |
 | `addon/__init__.py` | Guards `from aqt import mw` so modules import outside Anki |
 | `addon/main.py`, `ui.py`, `config_page.py`, `generate_page.py` | Anki/Qt-facing: hooks, reviewer UI, ⚙ Settings page, ✨ Generate/Update Cards page |
 | `addon/session.py` | Long-running `claude` (stream-json) / stateless `codex exec` provider sessions |
@@ -50,7 +51,7 @@ This repo is the add-on. For development, `addon/` is **symlinked** into Anki as
    cd $D && env -i PATH=/usr/bin:/bin HOME=$HOME python3 -c "import anki_ai, anki_ai.session as s; print(s.find_claude(''))"
    ```
    The `env -i` PATH mimics Anki launched from the Dock (no shell PATH). The CLI must still be found.
-6. **Record**: append decisions to `docs/spec.md`; update `docs/guide.md` (and `README.md` if the summary changes) for anything user-visible.
+6. **Record**: update the affected section of `docs/spec.md` so it describes current behaviour (no "later"/"replaces" notes); add a dated entry at the top of `CHANGELOG.md`; update `docs/guide.md` (and `README.md` if the summary changes) for anything user-visible.
 7. **Commit + push**: `git add -A && git commit -F <msgfile>` (subject: what changed), then `git push`. This repo is **public**: no personal paths, deck names, emails, or secrets in code, docs, tests, or commit messages.
 8. **Hand off**: Anki loads add-ons **only at startup**. Tell the user to restart Anki and name exactly what to click to see the change. Don't quit Anki yourself, because they may be mid-review. For live poking: Debug Console `Ctrl+Shift+;`.
 

@@ -45,4 +45,5 @@ pytest tests
 ## More
 
 - [docs/guide.md](docs/guide.md) — full user guide
-- [docs/spec.md](docs/spec.md) — design and decisions
+- [docs/spec.md](docs/spec.md) — how it works (design)
+- [CHANGELOG.md](CHANGELOG.md) — what changed, by version
