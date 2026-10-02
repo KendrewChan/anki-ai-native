@@ -278,3 +278,8 @@ def test_card_box_answers_questions_and_edits():
     assert 'placeholder="Ask AI about this card, or to change it' in html and "Because <b>ordering</b>" in html
     js = ui.edit_status_js("x < **y**", False)
     assert "x &lt; <b>y</b>" in js and "innerHTML" in js
+
+
+def test_prompt_explains_boxes_per_question():
+    assert "the parts of one question share a single box" in grading.SYSTEM_PROMPT
+    assert "return separate questions, not parts" in grading.SYSTEM_PROMPT
