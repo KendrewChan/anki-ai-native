@@ -30,6 +30,14 @@ CSS = """
 .sect table { border-collapse: collapse; } .sect td { padding: 0.15em 1.2em 0.15em 0; vertical-align: top; }
 .sect td.k { opacity: 0.7; } .sect ol { margin: 0.2em 0 0 1.4em; padding: 0; }
 .sect button { margin-left: 0.6em; }
+.tree { font-size: 0.95em; } .tree details, .tree .leaf { margin-left: 1.1em; }
+.tree > details, .tree > .leaf { margin-left: 0; }
+.tree summary { cursor: pointer; } .tree .leaf { padding-left: 1em; }
+.tree a { cursor: pointer; } .tree a.sel { font-weight: 700; text-decoration: underline; }
+.tree .dot { color: #27864a; font-size: 0.8em; margin-left: 0.3em; }
+.panel { margin-top: 0.7em; padding: 0.6em 0.8em; border: 1px solid #8884; border-radius: 6px; }
+.panel .name { font-weight: 600; margin-bottom: 0.3em; } .panel .inh { opacity: 0.75; margin-top: 0.3em; }
+.panel .p { white-space: pre-wrap; }
 </style>
 """
 
@@ -39,7 +47,10 @@ window.aiCfg = {
   update(logHtml, sectionsHtml, status, busy) {
     const log = document.getElementById("log");
     log.innerHTML = logHtml; log.scrollTop = log.scrollHeight;
-    document.getElementById("sections").innerHTML = sectionsHtml;
+    const sections = document.getElementById("sections");
+    const open = new Set(Array.from(sections.querySelectorAll("details[open]")).map(d => d.dataset.deck));
+    sections.innerHTML = sectionsHtml;
+    sections.querySelectorAll("details").forEach(d => { if (open.has(d.dataset.deck)) d.open = true; });
     document.getElementById("status").textContent = status;
     const cmd = document.getElementById("cmd");
     cmd.disabled = busy; if (!busy) cmd.focus();
@@ -71,6 +82,7 @@ class ConfigPage:
         self.auth = "checking…"
         self.logged_in = None
         self.busy = False
+        self.selected = None  # full deck name chosen in the Deck Prompts tree
         setattr(mw, f"_{STATE}State", self._enter)
         setattr(mw, f"_{STATE}Cleanup", self._leave)
 
@@ -96,6 +108,9 @@ class ConfigPage:
     def _on_bridge(self, message: str):
         if message == "aiCfg:back":
             mw.moveToState("deckBrowser")
+        elif message.startswith("aiCfg:select:"):
+            self.selected = message[len("aiCfg:select:"):]
+            self._update(None)
         elif message == "aiCfg:login":
             self._run_auth("login")
         elif message.startswith("aiCfg:send:") and not self.busy:
@@ -106,7 +121,7 @@ class ConfigPage:
         self.transcript.append(("you", text))
         self.busy = True
         self._update("Thinking…")
-        prompt = config_ops.config_prompt(cfg, self.auth, text)
+        prompt = config_ops.config_prompt(cfg, self.auth, text, self._decks(), self.selected)
         self._session(cfg).request(0, prompt, config_ops.parse_config_reply, 90, self._on_reply)
 
     def _on_reply(self, _id, result, err):
@@ -118,7 +133,9 @@ class ConfigPage:
         if result["reply"]:
             self.transcript.append(("ai", result["reply"]))
         cfg = self._cfg()
-        new, log, auth = config_ops.apply_changes(cfg, result["changes"], self.history)
+        decks = self._decks()
+        new, log, auth = config_ops.apply_changes(cfg, result["changes"], self.history, decks=decks)
+        new = config_ops.prune_deck_prompts(new, set(decks.values()))
         self.transcript += [("chg" if line.startswith("✓") else "err", line) for line in log]
         if new != cfg:
             mw.addonManager.writeConfig(self.addon, new)
@@ -185,6 +202,9 @@ class ConfigPage:
 
     # --- rendering ---
 
+    def _decks(self) -> dict:
+        return {d.name: str(d.id) for d in mw.col.decks.all_names_and_ids()}
+
     def _cfg(self) -> dict:
         return mw.addonManager.getConfig(self.addon) or {}
 
@@ -218,7 +238,43 @@ class ConfigPage:
         rules = ("<ol>" + "".join(f"<li>{html.escape(r)}</li>" for r in custom) + "</ol>"
                  if custom else '<div style="opacity:.6">none yet</div>')
         return (f'<div class="sect"><h3>Configurations</h3><table>{table}</table></div>'
-                f'<div class="sect"><h3>Custom</h3>{rules}</div>')
+                f'<div class="sect"><h3>Custom Generic Rules</h3>{rules}</div>'
+                f'<div class="sect"><h3>Deck Prompts</h3>{self._deck_html(cfg)}</div>')
+
+    def _deck_html(self, cfg) -> str:
+        decks = self._decks()
+        prompts = cfg.get("deck_prompts") or {}
+        names = sorted(decks, key=lambda n: n.lower())
+        sel = self.selected if self.selected in decks else None
+        ancestors = {"::".join(sel.split("::")[:i]) for i in range(1, sel.count("::") + 1)} if sel else set()
+
+        def node(name: str) -> str:
+            depth = name.count("::") + 1
+            kids = [n for n in names if n.startswith(name + "::") and n.count("::") + 1 == depth + 1]
+            label = html.escape(name.split("::")[-1])
+            dot = '<span class="dot">●</span>' if prompts.get(decks[name], "").strip() else ""
+            cls = ' class="sel"' if name == sel else ""
+            js = html.escape(f"pycmd({json.dumps('aiCfg:select:' + name)});event.preventDefault();", quote=True)
+            link = f'<a{cls} onclick="{js}">{label}</a>{dot}'
+            if not kids:
+                return f'<div class="leaf">{link}</div>'
+            is_open = " open" if name in ancestors else ""
+            return (f'<details data-deck="{html.escape(name)}"{is_open}><summary>{link}</summary>'
+                    + "".join(node(k) for k in kids) + "</details>")
+
+        tree = "".join(node(n) for n in names if "::" not in n)
+        if sel:
+            own = prompts.get(decks[sel], "").strip()
+            chain = [(n, p) for n, p in config_ops.deck_chain(sel, decks, prompts) if n != sel]
+            inh = "".join(f'<div class="inh">↳ {html.escape(n)}: <span class="p">{html.escape(p)}</span></div>'
+                          for n, p in chain)
+            panel = (f'<div class="panel"><div class="name">{html.escape(sel)}</div>'
+                     f'<div class="p">{html.escape(own) if own else "<i>no prompt — tell the AI what this deck needs</i>"}</div>'
+                     f'{inh}</div>')
+        else:
+            panel = '<div class="panel" style="opacity:.6">Click a deck to see its prompt.</div>'
+        return f'<div class="tree">{tree}</div>{panel}'
+
 
     def _page_html(self) -> str:
         return (

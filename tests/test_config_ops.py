@@ -11,9 +11,9 @@ BASE = {"claude_path": "/bin/claude", "model": "sonnet", "missed_append": True,
         "ask_timeout_s": 30, "grade_timeout_s": 60, "custom": []}
 
 
-def apply(changes, cfg=None, history=None, executable=True):
+def apply(changes, cfg=None, history=None, executable=True, decks=None):
     history = [] if history is None else history
-    new, log, auth = config_ops.apply_changes(dict(cfg or BASE), changes, history, lambda p: executable)
+    new, log, auth = config_ops.apply_changes(dict(cfg or BASE), changes, history, lambda p: executable, decks)
     return new, log, auth, history
 
 
@@ -82,3 +82,66 @@ def test_tutor_system_prompt_appends_custom_rules():
     assert grading.system_prompt([]) == grading.SYSTEM_PROMPT
     sp = grading.system_prompt(["grade strictly", " "])
     assert sp.startswith(grading.SYSTEM_PROMPT) and sp.endswith("- grade strictly")
+
+
+DECKS = {"Coding": "1", "Coding::Languages": "2", "Coding::Languages::Golang": "3",
+         "HSK": "4", "Archive::Languages::Golang": "5"}
+
+
+def test_deck_chain_outer_to_inner_skips_decks_without_prompt():
+    prompts = {"1": "scenario questions", "3": "ask for code", "4": "pinyin"}
+    assert config_ops.deck_chain("Coding::Languages::Golang", DECKS, prompts) == [
+        ("Coding", "scenario questions"), ("Coding::Languages::Golang", "ask for code")]
+    assert config_ops.deck_chain("HSK", DECKS, prompts) == [("HSK", "pinyin")]
+    assert config_ops.deck_chain("Unknown::Deck", DECKS, prompts) == []
+
+
+def test_set_and_clear_deck_prompt_keyed_by_id():
+    new, log, _, hist = apply([{"set_deck_prompt": {"deck": "hsk", "prompt": "require pinyin"}}], decks=DECKS)
+    assert new["deck_prompts"] == {"4": "require pinyin"} and log == ['✓ prompt for HSK: "require pinyin"']
+    new, log, _, _ = apply([{"clear_deck_prompt": "HSK"}], cfg=new, decks=DECKS)
+    assert new["deck_prompts"] == {} and log == ["✓ cleared prompt for HSK"]
+
+
+def test_deck_prompt_survives_rename_because_keyed_by_id():
+    new, _, _, _ = apply([{"set_deck_prompt": {"deck": "HSK", "prompt": "pinyin"}}], decks=DECKS)
+    renamed = {"Chinese::HSK": "4"}
+    assert config_ops.deck_chain("Chinese::HSK", renamed, new["deck_prompts"]) == [("Chinese::HSK", "pinyin")]
+
+
+@pytest.mark.parametrize("change,msg", [
+    ({"set_deck_prompt": {"deck": "Golang", "prompt": "x"}}, "ambiguous"),
+    ({"set_deck_prompt": {"deck": "Nope", "prompt": "x"}}, "no deck named"),
+    ({"set_deck_prompt": {"deck": "HSK", "prompt": " "}}, "empty deck prompt"),
+    ({"clear_deck_prompt": "HSK"}, "has no prompt"),
+])
+def test_bad_deck_changes_rejected(change, msg):
+    new, log, _, hist = apply([change], decks=DECKS)
+    assert new == BASE and log[0].startswith("✗") and msg in log[0]
+
+
+def test_unique_leaf_name_resolves():
+    new, _, _, _ = apply([{"set_deck_prompt": {"deck": "languages", "prompt": "x"}}], decks=DECKS)
+    assert new["deck_prompts"] == {"2": "x"}
+
+
+def test_prune_drops_deleted_decks():
+    cfg = dict(BASE, deck_prompts={"4": "a", "99": "gone"})
+    assert config_ops.prune_deck_prompts(cfg, {"4"})["deck_prompts"] == {"4": "a"}
+
+
+def test_config_prompt_shows_selected_deck_chain():
+    cfg = dict(BASE, deck_prompts={"1": "scenarios", "3": "code"})
+    p = config_ops.config_prompt(cfg, "ok", "hi", DECKS, "Coding::Languages::Golang")
+    assert "Selected deck: Coding::Languages::Golang" in p
+    assert "  Coding: scenarios\n  Coding::Languages::Golang: code" in p
+    assert "- HSK" not in p and "HSK" in p  # listed as a deck, no prompt
+
+
+def test_card_prompts_carry_deck_rules():
+    rules = [("Coding", "scenarios"), ("Coding::Languages::Golang", "code")]
+    ask = grading.ask_prompt("Q", "A", rules)
+    grade = grading.grade_prompt("Q", [], "A", ["mine"], rules)
+    for p in (ask, grade):
+        assert "Deck rules (outer → inner):\n- Coding: scenarios\n- Coding::Languages::Golang: code" in p
+    assert "Deck rules" not in grading.ask_prompt("Q", "A")

@@ -23,7 +23,7 @@ Settings you can change (key: meaning):
 
 Custom generic rules: a numbered list of plain-language instructions that apply to EVERY card (e.g. "grade strictly"). Rewrite vague requests into one clear, imperative rule.
 
-Deck prompts: each Anki deck can have ONE free-text prompt that applies to cards in that deck and all its subdecks (subdecks inherit parent prompts). Use these when the user mentions a deck or "this deck" (= the selected deck). Use the exact full deck name from the deck list. Setting a deck prompt replaces the old one — when the user says "also …", merge the old prompt and the new request into one prompt.
+Deck prompts: each Anki deck can have ONE free-text prompt that applies to cards in that deck and all its subdecks (subdecks inherit parent prompts). Use these when the user mentions a deck or "this deck" (= the selected deck). Use the exact full deck name from the deck list. Setting a deck prompt replaces the old one — when the user says "also …", merge the old prompt and the new request into one prompt. Never copy a parent deck's prompt into a subdeck's — it is already inherited.
 
 Each message gives you the current settings, custom rules, deck list, deck prompts, the selected deck and login state, then the user's request.
 
