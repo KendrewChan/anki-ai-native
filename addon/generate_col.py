@@ -116,8 +116,8 @@ def _cleanup(col):
             col.decks.remove([did])
 
 
-def accept(col, deck: str = None) -> tuple:
-    """Port staged cards out of AI-GEN (all, or one real deck's): updates -> written into the original notes,
+def accept(col, ids=None) -> tuple:
+    """Port staged cards out of AI-GEN (all, or the staged note ids given): updates -> written into the original notes,
     new cards -> their real deck (created if missing). Emptied AI-GEN decks are removed. One undo step."""
     from anki.errors import NotFoundError
 
@@ -125,7 +125,7 @@ def accept(col, deck: str = None) -> tuple:
     counts = {"updated": 0, "added": 0}
     drop = []
     for s in staged(col):
-        if deck is not None and s["deck"] != deck:
+        if ids is not None and s["id"] not in ids:
             continue
         note = col.get_note(s["id"])
         orig = None
@@ -152,11 +152,11 @@ def accept(col, deck: str = None) -> tuple:
     return col.merge_undo_entries(pos), counts
 
 
-def discard(col, deck: str = None) -> tuple:
-    """Delete staged cards (all, or one real deck's); originals are untouched. One undo step."""
+def discard(col, ids=None) -> tuple:
+    """Delete staged cards (all, or the staged note ids given); originals are untouched. One undo step."""
     pos = col.add_custom_undo_entry(f"Discard {TEMP_DECK}")
-    ids = [s["id"] for s in staged(col) if deck is None or s["deck"] == deck]
-    if ids:
-        col.remove_notes(ids)
+    drop = [s["id"] for s in staged(col) if ids is None or s["id"] in ids]
+    if drop:
+        col.remove_notes(drop)
     _cleanup(col)
-    return col.merge_undo_entries(pos), len(ids)
+    return col.merge_undo_entries(pos), len(drop)

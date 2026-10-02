@@ -26,9 +26,13 @@ CSS = CONFIG_CSS + """
        background: transparent; color: inherit; cursor: default; outline: none; }
 #refinfo { font-size: 0.85em; opacity: 0.75; min-height: 1.2em; margin-bottom: 0.5em; }
 #refinfo.bad { color: #d33; opacity: 1; }
-.stg .deck { font-weight: 600; margin: 0.8em 0 0.2em; } .stg .deck button { font-size: 0.8em; margin-left: 0.5em; }
+.stg .deck { font-weight: 600; margin: 0.8em 0 0.2em; }
+.stg .card { display: flex; gap: 0.6em; align-items: flex-start; margin: 0.15em 0 0.15em 1em; }
+.stg .main { flex: 1; min-width: 0; } .stg .q { white-space: pre-wrap; overflow-wrap: anywhere; }
+.stg .plain { padding-left: 1.05em; } .stg .acts { white-space: nowrap; }
+.stg .acts button { font-size: 0.8em; margin-left: 0.3em; }
 #status.busy { opacity: 1; font-size: 0.95em; color: #2a6fd6; }
-.stg details { margin-left: 1em; } .stg summary { cursor: pointer; }
+.stg summary { cursor: pointer; }
 .stg .kind { font-size: 0.75em; padding: 0 0.35em; border-radius: 4px; border: 1px solid #8888; margin-right: 0.4em; }
 .stg .kind.upd { color: #b07400; border-color: #b0740088; } .stg .kind.new { color: #27864a; border-color: #27864a88; }
 .stg .fld { margin: 0.2em 0 0.4em 1em; } .stg .fld b { opacity: 0.7; font-weight: 500; }
@@ -132,11 +136,11 @@ class GeneratePage:
         elif message in ("aiGen:pickdir", "aiGen:pickfile"):
             self._pick(message == "aiGen:pickdir")
         elif message.startswith("aiGen:accept") and not self.busy:
-            deck = json.loads(message[len("aiGen:accept:"):]) if message != "aiGen:accept" else None
-            self._run_op(lambda col: _Result(generate_col.accept(col, deck)), self._accepted)
+            ids = [int(message[len("aiGen:accept:"):])] if message != "aiGen:accept" else None
+            self._run_op(lambda col: _Result(generate_col.accept(col, ids)), self._accepted)
         elif message.startswith("aiGen:discard") and not self.busy:
-            deck = json.loads(message[len("aiGen:discard:"):]) if message != "aiGen:discard" else None
-            self._run_op(lambda col: _Result(generate_col.discard(col, deck)),
+            ids = [int(message[len("aiGen:discard:"):])] if message != "aiGen:discard" else None
+            self._run_op(lambda col: _Result(generate_col.discard(col, ids)),
                          lambda n: self.say(f"Discarded {n} staged card{'s' if n != 1 else ''}. "
                                             "Edit → Undo brings them back."))
         elif message.startswith("aiGen:send:") and not self.busy:
@@ -277,16 +281,17 @@ class GeneratePage:
         for i, s in enumerate(staged, 1):
             if s["deck"] != deck:
                 deck = s["deck"]
-                arg = html.escape(json.dumps(json.dumps(deck)), quote=True)
-                out.append(f'<div class="deck">{html.escape(deck or "(no deck)")}'
-                           f'<button onclick="pycmd(\'aiGen:accept:\' + {arg})">Accept</button>'
-                           f'<button onclick="pycmd(\'aiGen:discard:\' + {arg})">Discard</button></div>')
+                out.append(f'<div class="deck">{html.escape(deck or "(no deck)")}</div>')
             kind = ('<span class="kind upd">UPDATE</span>' if s["of"] else '<span class="kind new">NEW</span>')
-            first = strip_html(next(iter(s["fields"].values()), ""))
-            title = html.escape(first[:110] + ("…" if len(first) > 110 else ""))
-            fields = "".join(f'<div class="fld"><b>{html.escape(k)}:</b> {html.escape(strip_html(v))}</div>'
-                             for k, v in s["fields"].items() if v.strip())
-            out.append(f'<details data-id="{s["id"]}"><summary>{i}. {kind}{title}</summary>{fields}</details>')
+            values = list(s["fields"].items())
+            question = f'{i}. {kind}<span class="q">{html.escape(strip_html(values[0][1]) if values else "")}</span>'
+            rest = "".join(f'<div class="fld"><b>{html.escape(k)}:</b> {html.escape(strip_html(v))}</div>'
+                           for k, v in values[1:] if v.strip())  # the question is already in the summary
+            body = (f'<details data-id="{s["id"]}"><summary>{question}</summary>{rest}</details>' if rest
+                    else f'<div class="plain">{question}</div>')
+            acts = (f'<span class="acts"><button onclick="pycmd(\'aiGen:accept:{s["id"]}\')">Accept</button>'
+                    f'<button onclick="pycmd(\'aiGen:discard:{s["id"]}\')">Discard</button></span>')
+            out.append(f'<div class="card"><div class="main">{body}</div>{acts}</div>')
         n = len(staged)
         buttons = (f'<div class="btns"><button onclick="pycmd(\'aiGen:accept\')">Accept all ({n})</button>'
                    f'<button onclick="pycmd(\'aiGen:discard\')">Discard all</button></div>')

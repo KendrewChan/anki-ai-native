@@ -83,13 +83,14 @@ def test_edit_remove_discard_undo(col):
     assert len(gc.staged(col)) == 1
 
 
-def test_accept_one_deck_leaves_the_rest(col):
+def test_accept_one_card_leaves_the_rest(col):
     stage(col, [{"add": {"deck": "Physics::Waves", "front": "c?", "back": "speed of light"}},
                 {"add": {"deck": "Biology", "front": "a", "back": "b"}}])
-    _, counts = gc.accept(col, "Physics::Waves")
+    physics = [s["id"] for s in gc.staged(col) if s["deck"] == "Physics::Waves"]
+    _, counts = gc.accept(col, physics)
     assert counts == {"updated": 0, "added": 1}
     assert "Physics::Waves" in decks(col) and "AI-GEN::Physics::Waves" not in decks(col)
     assert "AI-GEN::Physics" not in decks(col)  # emptied parent removed too
     assert [s["deck"] for s in gc.staged(col)] == ["Biology"] and "AI-GEN::Biology" in decks(col)
-    _, n = gc.discard(col, "Biology")
+    _, n = gc.discard(col, [gc.staged(col)[0]["id"]])
     assert n == 1 and col.decks.id_for_name("AI-GEN") is None  # AI-GEN gone once empty
