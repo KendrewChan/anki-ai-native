@@ -7,7 +7,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "..", "anki-ai"
 
 from addon import config_ops, grading  # noqa: E402
 
-BASE = {"claude_path": "/bin/claude", "model": "sonnet", "missed_append": True,
+BASE = {"claude_path": "/bin/claude", "models": {"claude": "sonnet", "codex": ""}, "missed_append": True,
         "ask_timeout_s": 30, "grade_timeout_s": 60, "custom": []}
 
 
@@ -19,8 +19,8 @@ def apply(changes, cfg=None, history=None, executable=True, decks=None):
 
 def test_set_model_and_timeout_logged():
     new, log, _, hist = apply([{"set": {"model": "opus", "grade_timeout_s": "90"}}])
-    assert new["model"] == "opus" and new["grade_timeout_s"] == 90
-    assert log == ["✓ model: sonnet → opus", "✓ grade_timeout_s: 60 → 90"]
+    assert new["models"]["claude"] == "opus" and new["grade_timeout_s"] == 90
+    assert sorted(log) == ["✓ claude model: sonnet → opus", "✓ grade_timeout_s: 60 → 90"]
     assert hist == [BASE]
 
 
@@ -46,7 +46,7 @@ def test_claude_path_must_be_executable():
 
 def test_full_model_id_accepted():
     new, _, _, _ = apply([{"set": {"model": "claude-opus-5-5"}}])
-    assert new["model"] == "claude-opus-5-5"
+    assert new["models"]["claude"] == "claude-opus-5-5"
 
 
 def test_custom_add_and_remove():
@@ -75,7 +75,7 @@ def test_parse_config_reply():
 
 def test_config_prompt_lists_settings_rules_and_login():
     p = config_ops.config_prompt(dict(BASE, custom=["be strict"]), "logged in (claude.ai)", "use opus")
-    assert '"model": "sonnet"' in p and "1. be strict" in p and "logged in" in p and p.endswith("User: use opus")
+    assert '"model": "sonnet"' in p and '"codex": ""' in p and "1. be strict" in p and "logged in" in p and p.endswith("User: use opus")
 
 
 def test_tutor_system_prompt_appends_custom_rules():

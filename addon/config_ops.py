@@ -4,6 +4,7 @@ import json
 import os
 
 from .grading import parse_json_reply
+from .session import model_for
 
 MODEL_ALIASES = ("haiku", "sonnet", "opus", "fable")
 PROVIDERS = ("claude", "codex")  # keep in sync with session.PROVIDERS
@@ -11,7 +12,7 @@ TIMEOUT_RANGE = (5, 600)
 
 SETTINGS = {
     "provider": "which AI runs the tutor: \"claude\" (Claude Code CLI, Claude subscription) or \"codex\" (OpenAI Codex CLI, ChatGPT subscription)",
-    "model": "model for the provider; \"\" = the provider's default. claude: haiku, sonnet, opus, fable or a claude-… id. codex: an OpenAI model id",
+    "model": "model for the CURRENT provider (each provider remembers its own); \"\" = the provider's default. claude: haiku, sonnet, opus, fable or a claude-… id. codex: an OpenAI model id",
     "ask_timeout_s": "seconds to wait for the sharp question (5-600)",
     "grade_timeout_s": "seconds to wait for a grade (5-600)",
     "missed_append": "true/false — append Missed bullets to the card's Back after grading",
@@ -50,6 +51,8 @@ def config_prompt(cfg: dict, auth: str, message: str, decks: dict = None, select
     """decks: full deck name -> id (as str)."""
     decks = decks or {}
     settings = {k: cfg.get(k) for k in SETTINGS}
+    settings["model"] = model_for(cfg)
+    settings["models (per provider)"] = {p: model_for(cfg, p) for p in PROVIDERS}
     rules = "\n".join(f"{i}. {r}" for i, r in enumerate(cfg.get("custom") or [], 1)) or "(none)"
     names = {v: k for k, v in decks.items()}
     prompts = "\n".join(
@@ -164,8 +167,8 @@ def apply_changes(cfg: dict, changes: list, history: list, is_executable=None, d
     Returns (new_cfg, log_lines, auth_actions) where auth_actions ⊆ ["login", "logout"].
     """
     is_executable = is_executable or (lambda p: os.path.isfile(p) and os.access(p, os.X_OK))
-    before = _copy(cfg)
-    new = _copy(cfg)
+    before = _normalize(cfg)
+    new = _copy(before)
     log, auth = [], []
     for ch in changes:
         try:
@@ -178,14 +181,21 @@ def apply_changes(cfg: dict, changes: list, history: list, is_executable=None, d
             elif "set" in ch:
                 items = sorted((ch["set"] or {}).items(), key=lambda kv: kv[0] != "provider")
                 for key, value in items:
+                    provider = new.get("provider") or "claude"
                     try:
-                        v = _validate(key, value, is_executable, new.get("provider") or "claude")
+                        v = _validate(key, value, is_executable, provider)
                     except ValueError as e:
                         log.append(f"✗ {e}")
                         continue
-                    log.append(f"✓ {key}: {_show(new.get(key))} → {_show(v)}")
-                    new[key] = v
-                _fit_model_to_provider(new, log)
+                    if key == "model":
+                        log.append(f"✓ {provider} model: {_show(new['models'].get(provider, ''))} → {_show(v)}")
+                        new["models"][provider] = v
+                    elif key == "provider":
+                        log.append(f"✓ provider: {_show(provider)} → {v} (model: {_show(new['models'].get(v, ''))})")
+                        new[key] = v
+                    else:
+                        log.append(f"✓ {key}: {_show(new.get(key))} → {_show(v)}")
+                        new[key] = v
             elif "add_custom" in ch:
                 rule = str(ch["add_custom"]).strip()
                 if not rule:
@@ -231,14 +241,12 @@ def apply_changes(cfg: dict, changes: list, history: list, is_executable=None, d
     return new, log, auth
 
 
-def _fit_model_to_provider(cfg: dict, log: list):
-    """A model that doesn't belong to the current provider (e.g. sonnet under codex) falls back to default."""
-    model = cfg.get("model") or ""
-    try:
-        _validate("model", model, None, cfg.get("provider") or "claude")
-    except ValueError:
-        log.append(f"✓ model: {model} → default (not valid for {cfg.get('provider')})")
-        cfg["model"] = ""
+def _normalize(cfg: dict) -> dict:
+    """Copy with per-provider models (migrates the legacy single "model" key)."""
+    out = _copy(cfg)
+    out["models"] = {p: model_for(cfg, p) for p in PROVIDERS}
+    out.pop("model", None)
+    return out
 
 
 def _copy(cfg: dict) -> dict:

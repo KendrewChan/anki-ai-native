@@ -105,10 +105,20 @@ def build_codex_command(codex_path: str, model: str, cwd: str) -> list:
             *(["-m", model] if model else []), "-C", cwd, "-"]
 
 
+def model_for(cfg: dict, provider: str = None) -> str:
+    """The provider's own model ("" = its default). Each provider remembers its model in cfg["models"]."""
+    active = cfg.get("provider") or "claude"
+    provider = provider or active
+    models = cfg.get("models")
+    if isinstance(models, dict) and provider in models:
+        return models[provider] or ""
+    return (cfg.get("model") or "") if provider == active else ""  # legacy single "model" key
+
+
 def make_backend(cfg: dict, system_prompt: str, cwd: str, dispatch):
     """The configured provider's backend. `cfg` is the add-on config."""
     provider = cfg.get("provider") or "claude"
-    model = cfg.get("model") or ""
+    model = model_for(cfg)
     if provider == "codex":
         cmd = build_codex_command(find_cli("codex", cfg.get("codex_path", "")), model, cwd)
         return CodexBackend(cmd, cwd, dispatch, system_prompt)

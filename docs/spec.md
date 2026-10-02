@@ -109,3 +109,9 @@ Each graded review **replaces** the card's Missed section (in the field chosen b
 - `model` = `""` → provider default; switching provider resets a model that doesn't fit (e.g. `sonnet` under codex). Codex models: any OpenAI id.
 - Login per provider: Claude `claude auth status|login|logout` (JSON); Codex `codex login status` / `codex login` / `codex logout`.
 - Settings page: Provider row with **Use <other>** buttons (works even when the current provider's AI is broken), model shows "default", CLI path per provider (`claude_path`, `codex_path`, auto-detected).
+
+## v1.5 — settings polish (2026-10-02)
+
+- **Provider is a dropdown** (Claude Code / Codex) in Configurations — a plain control so a broken provider can always be switched without the chat.
+- **Per-provider models**: `models: {"claude": …, "codex": …}`; "use opus" sets the current provider's model; switching provider restores that provider's own model. Legacy single `model` key is read as the active provider's model and migrated on the next save. The Model row shows the current provider's model ("default" = the CLI's own default).
+- **Chat log**: only the latest 3 AI replies are shown; no per-change ✓ lines. A rejected change (✗ reason) is folded into that reply and shown in red. Dropdown changes are silent (Configurations shows the result).

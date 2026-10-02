@@ -9,7 +9,9 @@ import threading
 from aqt import mw
 
 from . import config_ops
-from .session import PROVIDER_LABELS, auth_command, find_cli, make_backend, read_auth_status
+from collections import deque
+
+from .session import PROVIDER_LABELS, auth_command, find_cli, make_backend, model_for, read_auth_status
 
 STATE = "aiStudyConfig"
 
@@ -29,7 +31,7 @@ CSS = """
 .sect h3 { margin: 1em 0 0.3em; font-size: 1em; text-transform: uppercase; letter-spacing: 0.05em; opacity: 0.7; }
 .sect table { border-collapse: collapse; } .sect td { padding: 0.15em 1.2em 0.15em 0; vertical-align: top; }
 .sect td.k { opacity: 0.7; } .sect ol { margin: 0.2em 0 0 1.4em; padding: 0; }
-.sect button { margin-left: 0.6em; }
+.sect button { margin-left: 0.6em; } .sect select { font: inherit; }
 .tree { font-size: 0.95em; } .tree details, .tree .leaf { margin-left: 1.1em; }
 .tree > details, .tree > .leaf { margin-left: 0; }
 .tree summary { cursor: pointer; } .tree .leaf { padding-left: 1em; }
@@ -77,7 +79,7 @@ class ConfigPage:
         self.on_config_changed = on_config_changed
         self.session = None
         self.cwd = None
-        self.transcript = []  # (kind, text): kind in you | ai | chg | err
+        self.replies = deque(maxlen=3)  # (text, is_error): only the latest AI replies are shown
         self.history = []  # config snapshots for undo
         self.auth = "checking…"
         self.logged_in = None
@@ -121,7 +123,6 @@ class ConfigPage:
 
     def _send(self, text: str):
         cfg = self._cfg()
-        self.transcript.append(("you", text))
         self.busy = True
         self._update("Thinking…")
         prompt = config_ops.config_prompt(cfg, self.auth, text, self._decks(), self.selected)
@@ -130,22 +131,25 @@ class ConfigPage:
     def _on_reply(self, _id, result, err):
         self.busy = False
         if err:
-            self.transcript.append(("err", f"AI error: {err.message}"))
+            self.replies.append((f"AI error: {err.message}", True))
             self._update("")
             return
-        if result["reply"]:
-            self.transcript.append(("ai", result["reply"]))
-        for action in self._apply(result["changes"]):
+        rejected = []
+        actions = self._apply(result["changes"], rejected)
+        reply = " ".join(filter(None, [result["reply"], *rejected])) or "Done."
+        self.replies.append((reply, bool(rejected)))
+        for action in actions:
             self._run_auth(action)
         self._update("")
 
-    def _apply(self, changes) -> list:
-        """Validate + save changes, log them; returns requested auth actions."""
+    def _apply(self, changes, rejected=None) -> list:
+        """Validate + save changes; rejected ones go into `rejected`. Returns requested auth actions."""
         cfg = self._cfg()
         decks = self._decks()
         new, log, auth = config_ops.apply_changes(cfg, changes, self.history, decks=decks)
         new = config_ops.prune_deck_prompts(new, set(decks.values()))
-        self.transcript += [("chg" if line.startswith("✓") else "err", line) for line in log]
+        if rejected is not None:
+            rejected += [line for line in log if line.startswith("✗")]
         if new != cfg:
             mw.addonManager.writeConfig(self.addon, new)
             self.on_config_changed()
@@ -196,7 +200,7 @@ class ConfigPage:
         label = PROVIDER_LABELS[provider]
         note = {"login": f"Opening your browser to sign in to {label}…",
                 "logout": f"Logging out of {label} (this also signs it out everywhere on this computer)…"}[action]
-        self.transcript.append(("ai", note))
+        self.replies.append((note, False))
         self._update(None)
 
         def work():
@@ -210,7 +214,7 @@ class ConfigPage:
             def done():
                 if msg:
                     cmd = " ".join(auth_command(provider, provider, action))
-                    self.transcript.append(("err", f"{action} failed: {msg} — try `{cmd}` in a terminal."))
+                    self.replies.append((f"{action} failed: {msg} — try `{cmd}` in a terminal.", True))
                 self._refresh_auth()
 
             mw.taskman.run_on_main(done)
@@ -233,11 +237,10 @@ class ConfigPage:
         mw.web.eval(f"window.aiCfg && aiCfg.update({', '.join(json.dumps(a) for a in args)});")
 
     def _log_html(self) -> str:
-        if not self.transcript:
+        if not self.replies:
             return ('<div class="ai">Tell me what to change, in plain words — e.g. "use opus", '
                     '"give me 90 seconds to answer", "grade more strictly", "undo that".</div>')
-        return "".join(f'<div class="{k}">{"&gt; " if k == "you" else ""}{html.escape(t)}</div>'
-                       for k, t in self.transcript)
+        return "".join(f'<div class="{"err" if bad else "ai"}">{html.escape(t)}</div>' for t, bad in self.replies)
 
     def _sections_html(self) -> str:
         cfg = self._cfg()
@@ -245,17 +248,18 @@ class ConfigPage:
         if self.logged_in is False:
             login += ' <button onclick="pycmd(\'aiCfg:login\')">Log in</button>'
         provider, found = self._provider(cfg)
-        # Recovery without the AI: if the current provider is broken, the chat can't fix it.
-        switch = "".join(
-            f' <button onclick="pycmd(\'aiCfg:provider:{p}\')">Use {PROVIDER_LABELS[p]}</button>'
-            for p in PROVIDER_LABELS if p != provider
+        # A plain control, not the chat: if the current provider is broken, the chat can't fix it.
+        options = "".join(
+            f'<option value="{p}"{" selected" if p == provider else ""}>{html.escape(label)}</option>'
+            for p, label in PROVIDER_LABELS.items()
         )
-        rows = [("Provider", html.escape(PROVIDER_LABELS[provider]) + switch), ("Login", login)] + [
+        select = f'<select onchange="pycmd(\'aiCfg:provider:\' + this.value)">{options}</select>'
+        rows = [("Provider", select), ("Login", login)] + [
             (label, html.escape(str(cfg.get(key))))
             for label, key in (("Ask timeout (s)", "ask_timeout_s"),
                                ("Grade timeout (s)", "grade_timeout_s"), ("Missed append", "missed_append"))
         ]
-        rows.insert(2, ("Model", html.escape(cfg.get("model") or "default")))
+        rows.insert(2, ("Model", html.escape(model_for(cfg) or "default")))
         path = cfg.get(f"{provider}_path") or ""
         rows.append((f"{PROVIDER_LABELS[provider]} path",
                      html.escape(path if path and path != "auto" else f"auto → {found}")))

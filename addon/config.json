@@ -1,6 +1,9 @@
 {
     "provider": "claude",
-    "model": "sonnet",
+    "models": {
+        "claude": "sonnet",
+        "codex": ""
+    },
     "claude_path": "",
     "codex_path": "",
     "missed_append": true,

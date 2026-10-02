@@ -93,10 +93,11 @@ def test_claude_command_omits_model_when_default():
 
 
 def test_make_backend_picks_provider(tmp_path):
-    b = session.make_backend({"provider": "codex", "codex_path": "/x/codex"}, "S", str(tmp_path), lambda f: f())
+    b = session.make_backend({"provider": "codex", "codex_path": "/x/codex", "models": {"codex": "gpt-x"}},
+                             "S", str(tmp_path), lambda f: f())
     c = session.make_backend({"claude_path": "/x/claude"}, "S", str(tmp_path), lambda f: f())
     try:
-        assert isinstance(b, CodexBackend) and b._cmd[0] == "/x/codex"
+        assert isinstance(b, CodexBackend) and b._cmd[0] == "/x/codex" and "gpt-x" in b._cmd
         assert isinstance(c, session.ClaudeSession) and c._cmd[0] == "/x/claude"
     finally:
         b.close()
@@ -119,7 +120,7 @@ def test_auth_commands():
     assert session.auth_command("claude", "c", "login") == ["c", "auth", "login"]
 
 
-BASE = {"provider": "claude", "model": "sonnet", "custom": []}
+BASE = {"provider": "claude", "models": {"claude": "sonnet", "codex": ""}, "custom": []}
 
 
 def apply(changes, cfg=None):
@@ -127,18 +128,27 @@ def apply(changes, cfg=None):
     return new, log
 
 
-def test_switching_provider_resets_model_to_default():
-    new, log = apply([{"set": {"provider": "codex"}}])
-    assert new["provider"] == "codex" and new["model"] == ""
-    assert log == ["✓ provider: claude → codex", "✓ model: sonnet → default (not valid for codex)"]
+def test_each_provider_remembers_its_own_model():
+    new, log = apply([{"set": {"provider": "codex"}}, {"set": {"model": "gpt-5.5"}}])
+    assert new["models"] == {"claude": "sonnet", "codex": "gpt-5.5"}
+    assert log == ["✓ provider: claude → codex (model: default)", "✓ codex model: default → gpt-5.5"]
+    back, log = apply([{"set": {"provider": "claude"}}], cfg=new)
+    assert session.model_for(back) == "sonnet" and log == ["✓ provider: codex → claude (model: sonnet)"]
 
 
-def test_switching_provider_with_model_validates_against_new_provider():
+def test_model_is_validated_against_the_provider_set_in_the_same_change():
     new, _ = apply([{"set": {"model": "gpt-5.5", "provider": "codex"}}])
-    assert new == dict(BASE, provider="codex", model="gpt-5.5")
+    assert new["provider"] == "codex" and new["models"]["codex"] == "gpt-5.5" and new["models"]["claude"] == "sonnet"
     new, log = apply([{"set": {"provider": "codex", "model": "opus"}}])
-    assert new["provider"] == "codex" and new["model"] == ""
-    assert any("not an OpenAI model id" in line for line in log)
+    assert new["models"]["codex"] == "" and any("not an OpenAI model id" in line for line in log)
+
+
+def test_legacy_single_model_key_migrates_to_active_provider():
+    legacy = {"provider": "codex", "model": "gpt-5.5", "custom": []}
+    assert session.model_for(legacy) == "gpt-5.5" and session.model_for(legacy, "claude") == ""
+    new, _ = apply([{"add_custom": "x"}], cfg=legacy)
+    assert "model" not in new and new["models"] == {"claude": "", "codex": "gpt-5.5"}
+    assert session.model_for({"custom": []}) == ""  # nothing set: provider default
 
 
 @pytest.mark.parametrize("value", ["gemini", "openai"])
@@ -149,7 +159,7 @@ def test_unknown_provider_rejected(value):
 
 def test_model_default_keyword():
     new, log = apply([{"set": {"model": "default"}}])
-    assert new["model"] == "" and log == ["✓ model: sonnet → default"]
+    assert new["models"]["claude"] == "" and log == ["✓ claude model: sonnet → default"]
 
 
 def _fake_cli(tmp_path, body):
