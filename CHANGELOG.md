@@ -2,6 +2,11 @@
 
 What changed in each version, newest first. How the add-on works today is in [docs/spec.md](docs/spec.md).
 
+## v1.17 — Hints and coloured grading (2026-10-02)
+
+- Each sharp question has a **?** hint tooltip: a short nudge from the same AI call, never the answer.
+- After grading, your answer is red when wrong and orange when partial, and the card's answer is green (the Missed section keeps its normal colour).
+
 ## v1.16 — AI Study remembers ON/OFF (2026-10-02)
 
 - The AI Study ON/OFF switch now stays as you left it when Anki restarts, instead of always starting OFF. Stored in `user_files/state.json`, so it isn't part of Settings' undo.

@@ -42,11 +42,18 @@ def test_parse_grade_rejects_bad_replies(reply):
 
 def test_parse_questions_list_capped_and_cleaned():
     r = grading.parse_questions('{"questions":[" a ","","b","c","d","e"]}')
-    assert r == {"questions": ["a", "b", "c", "d"]}
+    assert r == {"questions": ["a", "b", "c", "d"], "hints": ["", "", "", ""]}
+
+
+def test_parse_questions_hints_aligned_to_questions():
+    r = grading.parse_questions('{"questions":["a","b"],"hints":[" think X ","y","extra"]}')
+    assert r == {"questions": ["a", "b"], "hints": ["think X", "y"]}
+    assert grading.parse_questions('{"questions":["a","b"],"hints":["h"]}')["hints"] == ["h", ""]
+    assert "hints" in grading.SYSTEM_PROMPT
 
 
 def test_parse_questions_accepts_single_question_key():
-    assert grading.parse_questions('{"question":" Why? "}') == {"questions": ["Why?"]}
+    assert grading.parse_questions('{"question":" Why? "}') == {"questions": ["Why?"], "hints": [""]}
 
 
 @pytest.mark.parametrize("reply", ['{"questions":[]}', '{"questions":[""]}', '{"other":1}'])
@@ -108,6 +115,25 @@ def test_verdict_html_per_question_rows():
          "per_question": [{"verdict": "correct", "note": "n1"}, {"verdict": "wrong", "note": "n2"}]}
     html = ui.verdict_html(v, ["Q one", "Q two"], ["a1", ""])
     assert "✓ Q one" in html and "✗ Q two" in html and "(blank)" in html and "<li>m</li>" in html
+
+
+def test_verdict_html_colours_wrong_red_partial_orange():
+    v = {"verdict": "partial", "ease": 2, "feedback": "f", "missed": [],
+         "per_question": [{"verdict": "correct", "note": ""}, {"verdict": "wrong", "note": ""},
+                          {"verdict": "partial", "note": ""}]}
+    html = ui.verdict_html(v, ["Q1", "Q2", "Q3"], ["a1", "a2", "a3"])
+    assert '<div class="ai-you">You: a1' in html
+    assert '<div class="ai-you ai-you-wrong">You: a2' in html and '<div class="ai-you ai-you-partial">You: a3' in html
+    single = ui.verdict_html(dict(v, verdict="wrong", per_question=[]), [], ["x"])
+    assert 'class="ai-you ai-you-wrong"' in single
+
+
+def test_model_answer_green_back_only_missed_kept_plain():
+    ans = "<b>Q</b><hr id=answer>Back fact<hr><b>Missed (2026-10-01)</b><ul><li>m</li></ul>"
+    out = ui.model_answer_html(ans)
+    assert out.startswith("<b>Q</b><hr id=answer><div class=\"ai-model\">Back fact")
+    assert '<div class="ai-missed-sec"><hr><b>Missed (2026-10-01)</b><ul><li>m</li></ul></div>' in out
+    assert ui.model_answer_html("just back").startswith('<div class="ai-model">just back')
 
 
 def test_missed_html_nothing():

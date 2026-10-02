@@ -47,7 +47,7 @@ Everything that doesn't import `aqt` is unit-tested with plain pytest.
 Only active while **AI Study** is ON, and only for cards whose home deck has AI Study on (per-deck setting, default on; see Deck Prompts in Settings). The ON/OFF link is on the home screen, on the deck overview and in **Tools → AI Study mode**. It stays as the user last left it across Anki restarts (`state.json` → `ui.ai_study`; off on first install). Off means the plain reviewer runs and no AI process starts; turning it off kills the session. The flow is display-only, through `gui_hooks.card_will_show`: nothing is written to the card except the Missed section.
 
 **Question side**
-- Sharp questions are on by default and set per deck (see Deck Prompts in Settings). When on for the card's home deck, an ask request returns `{"questions": [1–4]}`, one per distinct point the card bundles. Otherwise the card's own question is used.
+- Sharp questions are on by default and set per deck (see Deck Prompts in Settings). When on for the card's home deck, an ask request returns `{"questions": [1–4], "hints": [...]}`, one question per distinct point the card bundles. Each hint (≤ 12 words, never the answer) shows as a **?** tooltip after its question; missing hints are allowed. Otherwise the card's own question is used.
 - Cloze cards always use their own blanked question.
 - Layout: a collapsed **Show original** (Anki's normal question) at the top, then a question + answer box pair for each question. With sharp questions, no box is shown until `ask` returns (only "Thinking of a sharp question…"). If `ask` fails, one box appears under the opened original. Without sharp questions (or for cloze), the original is shown with its box ready at once.
 - **Enter** moves to the next box; Enter in the last box submits all. **Shift+Enter** inserts a newline. Enter with every box empty shows the plain answer, with no verdict.
@@ -57,7 +57,7 @@ Only active while **AI Study** is ON, and only for cards whose home deck has AI 
 - A grade request returns `{"verdict": "wrong"|"partial"|"correct", "ease": 1-4, "feedback", "missed": [str], "per_question": [...]}`.
 - The full card is sent again, so grading works even if `ask` failed or was skipped.
 - The rubric is fixed: wrong 1, partial 2, correct 3, correct + complete and crisp 4. Missed bullets are ≤ 12 words, and contain only reference facts the user left out.
-- The answer side shows a verdict badge, the user's answers, feedback, per-question marks and Missed bullets, all above the normal answer. The recommended ease button is outlined; the user presses it (or another).
+- The answer side shows a verdict badge, the user's answers, feedback, per-question marks and Missed bullets, all above the normal answer. Each answer is red when its question was graded wrong and orange when partial (the overall verdict when there are no per-question marks). The card's back (after `<hr id=answer>`) is green, except its Missed section, which a small script sets back to the page's text colour. The recommended ease button is outlined; the user presses it (or another).
 
 **Missed section** (`missed_append`, default on)
 - After each graded review, the card's Missed section is **replaced** with exactly one `<hr><b>Missed (YYYY-MM-DD)</b><ul>…</ul>` (or `…</b>: nothing`).

@@ -11,7 +11,8 @@ Two kinds of message arrive:
 1. NEW CARD — you get the card's question and reference answer. Turn the question into sharp, concrete questions that force out the key facts of the reference answer. Prefer a specific scenario or "explain X and why Y" over "tell me about X". Never leak the answer, and never steer toward a different point than the reference answer makes.
    - Normally return ONE question. If the card bundles several distinct points (e.g. "X (a, b, c)" or "What is X? Why Y?"), return one question per point, at most 4.
    - If the question is already a single concrete question, return it unchanged.
-   Reply: {"questions": ["<question>", ...]}
+   - hints: one per question, in order — a nudge of at most 12 words that points toward the idea without giving the answer.
+   Reply: {"questions": ["<question>", ...], "hints": ["<hint>", ...]}
 
 2. GRADE — you get the card again plus the user's free-text answer to each question asked. Judge ONLY against this card's reference answer; ignore earlier cards. Match each answer to its own question; a blank answer is wrong for that question.
    - per_question: for each question in order, {"verdict": "wrong"|"partial"|"correct", "note": "<at most 15 words>"}.
@@ -49,10 +50,14 @@ def strip_html(text: str) -> str:
     return re.sub(r"\s*\n\s*", "\n", text).strip()
 
 
-def answer_only(answer_html: str) -> str:
-    """Anki's rendered answer usually repeats the question above <hr id=answer>; keep what follows."""
+def split_answer(answer_html: str) -> tuple:
+    """(front, back): Anki's rendered answer usually repeats the question above <hr id=answer>. No marker = all back."""
     m = re.search(r"(?i)<hr[^>]*id=[\"']?answer[\"']?[^>]*>", answer_html)
-    return answer_html[m.end():] if m else answer_html
+    return (answer_html[:m.end()], answer_html[m.end():]) if m else ("", answer_html)
+
+
+def answer_only(answer_html: str) -> str:
+    return split_answer(answer_html)[1]
 
 
 def deck_rules_block(deck_rules: list) -> str:
@@ -110,7 +115,9 @@ def parse_questions(text: str) -> dict:
     qs = [str(q).strip() for q in qs if str(q).strip()][:MAX_QUESTIONS]
     if not qs:
         raise ValueError("reply has no 'questions'")
-    return {"questions": qs}
+    hints = obj.get("hints")
+    hints = [str(h).strip() for h in hints] if isinstance(hints, list) else []
+    return {"questions": qs, "hints": (hints + [""] * len(qs))[:len(qs)]}  # one per question; "" = none
 
 
 def parse_grade(text: str) -> dict:

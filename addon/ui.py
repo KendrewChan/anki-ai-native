@@ -3,6 +3,8 @@
 import html
 import json
 
+from . import grading
+
 CSS = """
 <style>
 #ai-study { text-align: left; width: min(92vw, 70em); margin: 0 auto 1em; font-size: 0.95em; }
@@ -11,6 +13,13 @@ CSS = """
 .ai-item { margin-bottom: 0.9em; }
 .ai-q { font-size: 1.15em; font-weight: 600; margin: 0.2em 0 0.4em; white-space: pre-wrap; }
 .ai-q.loading { opacity: 0.55; font-weight: 400; font-style: italic; }
+.ai-hint { position: relative; display: inline-block; margin-left: 0.4em; width: 1.2em; height: 1.2em; line-height: 1.2em;
+           border-radius: 50%; border: 1px solid #8888; text-align: center; font-size: 0.7em; font-weight: 400;
+           cursor: help; vertical-align: middle; opacity: 0.7; }
+.ai-hint .tip { display: none; position: absolute; top: calc(100% + 6px); left: -0.6em; z-index: 10; width: max-content;
+                max-width: 24em; white-space: normal; text-align: left; font-size: 1.3em; line-height: 1.4;
+                padding: 0.45em 0.7em; border-radius: 6px; background: #2b2b2b; color: #eee; box-shadow: 0 3px 12px #0006; }
+.ai-hint:hover, .ai-hint:focus { opacity: 1; } .ai-hint:hover .tip, .ai-hint:focus .tip { display: block; }
 .ai-ans { width: 100%; box-sizing: border-box; height: var(--ai-box-h, 35vh); min-height: 6em; resize: vertical;
           padding: 0.6em; font: inherit; border-radius: 6px; border: 1px solid #8888; background: transparent; color: inherit; }
 #ai-status { margin-top: 0.2em; font-size: 0.85em; opacity: 0.75; min-height: 1.2em; }
@@ -22,6 +31,8 @@ CSS = """
 .ai-wrong { background: #c0392b; } .ai-partial { background: #c27c0e; } .ai-correct { background: #27864a; }
 .ai-pq { margin: 0.6em 0; } .ai-pq-q { font-weight: 600; }
 .ai-you { opacity: 0.75; white-space: pre-wrap; margin: 0.2em 0; }
+.ai-you.ai-you-wrong { color: #d33; opacity: 1; } .ai-you.ai-you-partial { color: #d97706; opacity: 1; }
+.ai-model { color: #27864a; }
 .ai-verdict ul { margin: 0.3em 0 0 1.2em; padding: 0; }
 </style>
 """
@@ -61,13 +72,24 @@ JS = """
     });
   }
 
-  function addItem(question) {
+  function addItem(question, hint) {
     const item = document.createElement("div");
     item.className = "ai-item";
     if (question !== null) {
       const label = document.createElement("div");
       label.className = "ai-q";
       label.textContent = question;
+      if (hint) {
+        const help = document.createElement("span");
+        help.className = "ai-hint";
+        help.tabIndex = -1;  // focusable by click (shows the tip), but Tab still goes box to box
+        help.textContent = "?";
+        const tip = document.createElement("span");
+        tip.className = "tip";
+        tip.textContent = hint;
+        help.append(tip);
+        label.append(help);
+      }
       item.append(label);
     }
     const box = document.createElement("textarea");
@@ -79,10 +101,10 @@ JS = """
   }
 
   window.aiStudy = {
-    setQuestions(qs) {
+    setQuestions(qs, hints) {
       if (submitted) return;
       list.innerHTML = "";
-      qs.forEach((q, i) => addItem(qs.length > 1 ? (i + 1) + ". " + q : q));
+      qs.forEach((q, i) => addItem(qs.length > 1 ? (i + 1) + ". " + q : q, (hints || [])[i]));
       sizeBoxes();
       boxes()[0].focus();
     },
@@ -137,11 +159,11 @@ def verdict_html(verdict: dict, questions: list, answers: list) -> str:
             a = answers[i] if i < len(answers) else ""
             rows.append(
                 f'<div class="ai-pq"><span class="ai-pq-q">{marks[pq["verdict"]]} {html.escape(q)}</span>'
-                f'<div class="ai-you">You: {html.escape(a.strip() or "(blank)")}</div>'
+                f'<div class="ai-you{_you_class(pq["verdict"])}">You: {html.escape(a.strip() or "(blank)")}</div>'
                 f'<div>{html.escape(pq["note"])}</div></div>'
             )
     else:
-        rows.append(f'<div class="ai-you">You: {html.escape(chr(10).join(a for a in answers if a.strip()))}</div>')
+        rows.append(f'<div class="ai-you{_you_class(v)}">You: {html.escape(chr(10).join(a for a in answers if a.strip()))}</div>')
     missed = verdict["missed"]
     missed_part = (
         "<b>Missed:</b><ul>" + "".join(f"<li>{html.escape(m)}</li>" for m in missed) + "</ul>"
@@ -153,6 +175,23 @@ def verdict_html(verdict: dict, questions: list, answers: list) -> str:
         f"<div style='margin-top:0.5em'>{html.escape(verdict['feedback'])}</div>"
         f"<div style='margin-top:0.5em'>{missed_part}</div></div>"
     )
+
+
+def _you_class(verdict: str) -> str:
+    """The user's answer turns red when wrong, orange when partial."""
+    return {"wrong": " ai-you-wrong", "partial": " ai-you-partial"}.get(verdict, "")
+
+
+# The Missed section keeps the card's own text colour inside the green model answer.
+MISSED_COLOR_JS = ("<script>document.querySelectorAll('.ai-missed-sec').forEach("
+                   "e => e.style.color = getComputedStyle(document.body).color);</script>")
+
+
+def model_answer_html(answer: str) -> str:
+    """Graded answer side: the card's back (after <hr id=answer>) in green, except its Missed section."""
+    front, back = grading.split_answer(answer)
+    back = grading.MISSED_SECTION.sub(lambda m: f'<div class="ai-missed-sec">{m.group(0)}</div>', back)
+    return f'{front}<div class="ai-model">{back}</div>{MISSED_COLOR_JS}'
 
 
 def append_verdict_note_js(note: str) -> str:

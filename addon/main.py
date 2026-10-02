@@ -97,7 +97,7 @@ def on_card_will_show(text: str, card, kind: str) -> str:
     if kind == "reviewQuestion" and active(card):
         return ui.question_html(text, rewrite_enabled(card))
     if kind == "reviewAnswer" and card.id in S.verdicts:
-        return ui.verdict_html(*S.verdicts[card.id]) + text
+        return ui.verdict_html(*S.verdicts[card.id]) + ui.model_answer_html(text)
     return text
 
 
@@ -125,7 +125,7 @@ def on_asked(card_id, result, err):
         return
     S.failures = 0
     S.ctx[card_id]["questions"] = result["questions"]
-    eval_card(ui.js_call("setQuestions", result["questions"]))
+    eval_card(ui.js_call("setQuestions", result["questions"], result["hints"]))
 
 
 def on_js_message(handled, message: str, context):
