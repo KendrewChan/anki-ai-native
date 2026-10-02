@@ -14,17 +14,12 @@ SETTINGS = {
     "ask_timeout_s": "seconds to wait for the sharp question (5-600)",
     "grade_timeout_s": "seconds to wait for a grade (5-600)",
     "missed_append": "true/false — append Missed bullets to the card's Back after grading",
-    "sharp_questions": "true/false — the AI first turns each card into sharp questions; false = answer the card's own question as written (one AI call per card, faster)",
     "claude_path": "absolute path to the claude CLI executable, or \"\" to auto-detect",
     "codex_path": "absolute path to the codex CLI executable, or \"\" to auto-detect",
 }
 
 # On/off settings shown as toggle buttons on the settings page: key -> (label, tooltip lines). A missing key = on.
 TOGGLES = {
-    "sharp_questions": ("Sharp questions", (
-        "On: before you answer, the AI rewrites each card into sharp, concrete questions.",
-        "Off: you answer the card's own question as written (faster: one AI call per card).",
-        "Cloze cards always use their own question.")),
     "missed_append": ("Missed append", (
         "On: after each graded review, what you missed is written onto the card's Back as one "
         "\"Missed (date)\" section, replacing the previous one, so the answer side shows your latest gaps.",
@@ -51,6 +46,8 @@ Custom generic rules: a numbered list of plain-language instructions that apply 
 
 Deck prompts: each Anki deck can have ONE free-text prompt that applies to cards in that deck and all its subdecks (subdecks inherit parent prompts). Use these when the user mentions a deck or "this deck" (= the selected deck). Use the exact full deck name from the deck list. Setting a deck prompt replaces the old one — when the user says "also …", merge the old prompt and the new request into one prompt. Never copy a parent deck's prompt into a subdeck's — it is already inherited.
 
+Deck sharp questions: by default the AI first turns each card into sharp questions. A deck can turn this off (the user then answers the card's own question as written — one AI call per card, faster) or back on, for itself and its subdecks (the innermost deck with a setting wins). A deck prompt CANNOT do this — whenever the user wants sharp questions on/off for a deck, use set_deck_sharp, never a deck prompt. If a deck prompt only says to skip sharp questions, clear it in the same reply.
+
 Each message gives you the current settings, custom rules, deck list, deck prompts, the selected deck and login state, then the user's request.
 
 Reply with JSON only, no code fences:
@@ -62,6 +59,7 @@ A change is one of:
 {"remove_custom": <rule number, 1-based>}
 {"set_deck_prompt": {"deck": "<full deck name>", "prompt": "<the whole prompt>"}}
 {"clear_deck_prompt": "<full deck name>"}
+{"set_deck_sharp": {"deck": "<full deck name>", "on": true | false | null}}   — null = remove the deck's setting (follow the parent deck; default on)
 {"undo": true}        — revert the user's previous change
 {"login": true}       — sign in to the current provider's CLI (opens the browser)
 {"logout": true}      — also signs the user out of that CLI on this computer; only when they explicitly ask to log out
@@ -85,17 +83,21 @@ def config_prompt(cfg: dict, auth: str, message: str, decks: dict = None, select
     prompts = "\n".join(
         f"- {names[i]}: {p}" for i, p in (cfg.get("deck_prompts") or {}).items() if i in names
     ) or "(none)"
+    sharp = "\n".join(
+        f"- {names[i]}: {'on' if v else 'off'}" for i, v in (cfg.get("deck_sharp") or {}).items() if i in names
+    ) or "(none)"
     if selected:
         chain = deck_chain(selected, decks, cfg.get("deck_prompts") or {})
         inherited = "\n".join(f"  {n}: {p}" for n, p in chain) or "  (no prompts on this path)"
-        sel = f"{selected}\nPrompts that apply to it (outer → inner):\n{inherited}"
+        on = "on" if sharp_for_deck(cfg, selected, decks) else "off"
+        sel = f"{selected}\nPrompts that apply to it (outer → inner):\n{inherited}\nSharp questions here: {on}"
     else:
         sel = "(none)"
     return (
         f"Current settings:\n{json.dumps(settings, indent=1)}\n\n"
         f"Custom generic rules:\n{rules}\n\n"
         f"Decks:\n" + ("\n".join(sorted(decks)) or "(none)") + "\n\n"
-        f"Deck prompts:\n{prompts}\n\nSelected deck: {sel}\n\n"
+        f"Deck prompts:\n{prompts}\n\nDeck sharp questions settings (default on):\n{sharp}\n\nSelected deck: {sel}\n\n"
         f"Login: {auth}\n\nUser: {message}"
     )
 
@@ -112,11 +114,31 @@ def deck_chain(deck_name: str, decks: dict, prompts: dict) -> list:
     return chain
 
 
+def sharp_source(cfg: dict, deck_name: str, decks: dict):
+    """(on, deck name that decides it) — innermost deck setting on the path, else (True, None): on by default."""
+    overrides = cfg.get("deck_sharp") or {}
+    parts = deck_name.split("::")
+    for i in range(len(parts), 0, -1):
+        name = "::".join(parts[:i])
+        v = overrides.get(str(decks.get(name))) if name in decks else None
+        if v is not None:
+            return bool(v), name
+    return True, None
+
+
+def sharp_for_deck(cfg: dict, deck_name: str, decks: dict) -> bool:
+    return sharp_source(cfg, deck_name, decks)[0]
+
+
 def prune_deck_prompts(cfg: dict, deck_ids: set) -> dict:
-    """Drop prompts of decks that no longer exist."""
-    prompts = cfg.get("deck_prompts") or {}
-    kept = {i: p for i, p in prompts.items() if i in deck_ids}
-    return cfg if kept == prompts else dict(cfg, deck_prompts=kept)
+    """Drop prompts and sharp-question overrides of decks that no longer exist."""
+    out = cfg
+    for key in ("deck_prompts", "deck_sharp"):
+        old = out.get(key) or {}
+        kept = {i: v for i, v in old.items() if i in deck_ids}
+        if kept != old:
+            out = dict(out, **{key: kept})
+    return out
 
 
 def resolve_deck(name, decks: dict) -> str:
@@ -169,14 +191,8 @@ def _validate(key: str, value, is_executable, provider: str = "claude"):
         if not lo <= v <= hi:
             raise ValueError(f"{key} must be between {lo} and {hi} seconds")
         return v
-    if key in ("missed_append", "sharp_questions"):
-        if isinstance(value, bool):
-            return value
-        if str(value).lower() in ("true", "on", "yes", "1"):
-            return True
-        if str(value).lower() in ("false", "off", "no", "0"):
-            return False
-        raise ValueError(f"{key} must be true or false")
+    if key == "missed_append":
+        return _bool(key, value)
     if key in ("claude_path", "codex_path"):
         if str(value).strip().lower() in ("", "auto"):
             return ""
@@ -185,6 +201,16 @@ def _validate(key: str, value, is_executable, provider: str = "claude"):
             raise ValueError(f"{v} is not an executable file")
         return v
     raise ValueError(f"unknown setting {key!r}")
+
+
+def _bool(key: str, value) -> bool:
+    if isinstance(value, bool):
+        return value
+    if str(value).lower() in ("true", "on", "yes", "1"):
+        return True
+    if str(value).lower() in ("false", "off", "no", "0"):
+        return False
+    raise ValueError(f"{key} must be true or false")
 
 
 def apply_changes(cfg: dict, changes: list, history: list, is_executable=None, decks: dict = None):
@@ -255,6 +281,21 @@ def apply_changes(cfg: dict, changes: list, history: list, is_executable=None, d
                     raise ValueError(f"{name} has no prompt")
                 new["deck_prompts"] = prompts
                 log.append(f"✓ cleared prompt for {name}")
+            elif "set_deck_sharp" in ch:
+                spec = ch["set_deck_sharp"] if isinstance(ch["set_deck_sharp"], dict) else {}
+                name = resolve_deck(spec.get("deck"), decks or {})
+                on = spec.get("on")
+                if on is not None:
+                    on = _bool("sharp questions", on)
+                overrides = dict(new.get("deck_sharp") or {})
+                if on is None:
+                    if overrides.pop(str(decks[name]), None) is None:
+                        raise ValueError(f"{name} has no sharp questions setting")
+                    log.append(f"✓ sharp questions for {name}: follow parent (default on)")
+                else:
+                    overrides[str(decks[name])] = on
+                    log.append(f"✓ sharp questions for {name}: {'on' if on else 'off'}")
+                new["deck_sharp"] = overrides
             elif ch.get("login"):
                 auth.append("login")
             elif ch.get("logout"):
@@ -269,10 +310,11 @@ def apply_changes(cfg: dict, changes: list, history: list, is_executable=None, d
 
 
 def _normalize(cfg: dict) -> dict:
-    """Copy with a model entry per provider. Drops learned facts older versions kept here (now in state.py)."""
+    """Copy with a model entry per provider. Drops learned facts older versions kept here (now in state.py)
+    and the old global sharp_questions toggle (now per deck: deck_sharp)."""
     out = _copy(cfg)
     out["models"] = {p: model_for(cfg, p) for p in PROVIDERS}
-    for key in ("resolved_models", "last_good"):
+    for key in ("resolved_models", "last_good", "sharp_questions"):
         out.pop(key, None)
     return out
 

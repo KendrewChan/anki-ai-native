@@ -59,15 +59,21 @@ def active() -> bool:
     return S.enabled and not S.disabled
 
 
+def home_deck(card) -> str:
+    """The card's own deck name (its home deck when it sits in a filtered deck)."""
+    return mw.col.decks.name(card.odid or card.did)
+
+
 def deck_rules(card, c: dict) -> list:
-    """Prompt chain for the card's own deck (its home deck when it sits in a filtered deck)."""
-    did = card.odid or card.did
-    return config_ops.deck_chain(mw.col.decks.name(did), deck_ids(), c.get("deck_prompts") or {})
+    """Prompt chain for the card's own deck."""
+    return config_ops.deck_chain(home_deck(card), deck_ids(), c.get("deck_prompts") or {})
 
 
 def rewrite_enabled(card) -> bool:
-    """Ask the AI for sharp questions first? Not for cloze cards, nor when the user turned it off."""
-    return config_ops.toggle_on(cfg(), "sharp_questions") and card.note_type()["type"] != MODEL_CLOZE
+    """Ask the AI for sharp questions first? Not for cloze cards, nor when turned off (globally or for the deck)."""
+    if card.note_type()["type"] == MODEL_CLOZE:
+        return False
+    return config_ops.sharp_for_deck(cfg(), home_deck(card), deck_ids())
 
 
 def eval_card(js: str):

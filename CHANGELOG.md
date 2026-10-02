@@ -2,6 +2,12 @@
 
 What changed in each version, newest first. How the add-on works today is in [docs/spec.md](docs/spec.md).
 
+## v1.13 — Sharp questions per deck (2026-10-02)
+
+- Sharp questions are now set **per deck** (on by default; subdecks inherit, the innermost deck wins), e.g. tell Settings "no sharp questions for this deck". The deck panel shows whether they are on and which deck decides.
+- Removed the global **Sharp questions** toggle; the old setting is dropped on the next settings change.
+- Fix: a deck prompt like "don't generate sharp questions" had no effect, because the choice is made before any AI call. The Settings AI now uses the new deck setting instead of a prompt.
+
 ## v1.12 — No answer box before sharp questions (2026-10-02)
 
 - With **Sharp questions** on, the card no longer shows an answer box while the AI is thinking: the boxes appear with the questions, one per question. If the AI fails, a single box appears under the original. With it off (or for cloze), the box is ready immediately, as before.

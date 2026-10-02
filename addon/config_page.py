@@ -397,9 +397,12 @@ class ConfigPage(ChatPage):
             chain = [(n, p) for n, p in config_ops.deck_chain(sel, decks, prompts) if n != sel]
             inh = "".join(f'<div class="inh">↳ {html.escape(n)}: <span class="p">{html.escape(p)}</span></div>'
                           for n, p in chain)
+            on, src = config_ops.sharp_source(cfg, sel, decks)
+            where = "this deck" if src == sel else src or "default"
+            sharp = f'<div class="inh">Sharp questions: {"On" if on else "Off"} ({html.escape(where)})</div>'
             panel = (f'<div class="panel"><div class="name">{html.escape(sel)}</div>'
                      f'<div class="p">{html.escape(own) if own else "<i>no prompt — tell the AI what this deck needs</i>"}</div>'
-                     f'{inh}</div>')
+                     f'{inh}{sharp}</div>')
         else:
             panel = '<div class="panel" style="opacity:.6">Click a deck to see its prompt.</div>'
         return f'<div class="tree">{tree}</div>{panel}'

@@ -17,16 +17,16 @@ Study in the Anki reviewer with an AI tutor (Claude Code or Codex): it turns eac
 ## Use
 
 - Under the deck list (and under **Study Now**): **AI Study: OFF · ⚙ Settings · ✨ Generate/Update Cards**. Click to turn it on — it is off every time Anki starts. Also in **Tools → AI Study mode**.
-- While reviewing: type answers (Enter = next box / submit, Shift+Enter = new line, Enter with all boxes empty = just show the answer). **Show original** reveals the card's real front. With sharp questions on, the answer boxes appear once the questions arrive. Click **Sharp questions** off in settings to answer each card's own question as written (faster: one AI call per card).
+- While reviewing: type answers (Enter = next box / submit, Shift+Enter = new line, Enter with all boxes empty = just show the answer). **Show original** reveals the card's real front. Sharp questions are on by default and the answer boxes appear once they arrive. To answer a deck's cards as written (faster: one AI call per card), tell Settings "no sharp questions for <deck>"; subdecks follow.
 - The verdict shows above the answer; the recommended button is outlined. The card's Back keeps one **Missed (date)** section with your latest misses, replaced each review (**Missed append** in settings).
 
 ## Settings (⚙ Settings)
 
 Type what you want in plain words — "use opus", "give me 90 seconds to answer", "grade more strictly", "for this deck, ask for code", "undo that".
 
-- **Configurations** — provider (Claude Code / Codex; "use codex"), model ("default" = the provider's), timeouts, **Sharp questions** and **Missed append** On/Off buttons (hover the **?** for what they do), CLI path (auto-detected), login.
+- **Configurations** — provider (Claude Code / Codex; "use codex"), model ("default" = the provider's), timeouts, **Missed append** On/Off button (hover the **?** for what they do), CLI path (auto-detected), login.
 - **Custom Generic Rules** — apply to every card.
-- **Deck Prompts** — one prompt per deck; subdecks inherit their parents'. Click a deck to see what applies to it.
+- **Deck Prompts** — one prompt per deck; subdecks inherit their parents'. Sharp questions are switched per deck here too ("no sharp questions for this deck"). Click a deck to see what applies to it.
 
 ## Generate/Update Cards (✨ Generate/Update Cards)
 

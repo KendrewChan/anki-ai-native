@@ -28,7 +28,7 @@ def test_set_model_and_timeout_logged():
     ({"set": {"model": "gpt-4"}}, "unknown model"),
     ({"set": {"ask_timeout_s": 2}}, "between 5 and 600"),
     ({"set": {"missed_append": "maybe"}}, "true or false"),
-    ({"set": {"sharp_questions": "maybe"}}, "sharp_questions must be true or false"),
+    ({"set": {"sharp_questions": False}}, "unknown setting"),
     ({"set": {"colour": "red"}}, "unknown setting"),
     ({"remove_custom": 3}, "no custom rule 3"),
     ({"undo": True}, "nothing to undo"),
@@ -40,12 +40,10 @@ def test_invalid_changes_rejected_without_touching_config(change, msg):
     assert log[0].startswith("✗") and msg in log[0]
 
 
-def test_sharp_questions_toggle():
-    new, log, _, _ = apply([{"set": {"sharp_questions": "off"}}], cfg=dict(BASE, sharp_questions=True))
-    assert new["sharp_questions"] is False and log == ["✓ sharp_questions: true → false"]
-    new, _, _, _ = apply([{"set": {"sharp_questions": True}}], cfg=new)
-    assert new["sharp_questions"] is True
-    assert "sharp_questions" in config_ops.CONFIG_SYSTEM_PROMPT
+def test_old_global_sharp_questions_dropped_on_next_change():
+    new, _, _, _ = apply([{"set": {"grade_timeout_s": 90}}], cfg=dict(BASE, sharp_questions=False))
+    assert "sharp_questions" not in new and "sharp_questions" not in config_ops.TOGGLES
+    assert "set_deck_sharp" in config_ops.CONFIG_SYSTEM_PROMPT
 
 
 def test_claude_path_must_be_executable():
@@ -118,7 +116,34 @@ def test_deck_prompt_survives_rename_because_keyed_by_id():
     assert config_ops.deck_chain("Chinese::HSK", renamed, new["deck_prompts"]) == [("Chinese::HSK", "pinyin")]
 
 
+def test_deck_sharp_override_inherited_innermost_wins():
+    cfg = dict(BASE)
+    assert config_ops.sharp_source(cfg, "Coding::Languages::Golang", DECKS) == (True, None)  # default on
+    new, log, _, _ = apply([{"set_deck_sharp": {"deck": "Coding", "on": False}}], cfg=cfg, decks=DECKS)
+    assert new["deck_sharp"] == {"1": False} and log == ["✓ sharp questions for Coding: off"]
+    assert config_ops.sharp_source(new, "Coding::Languages::Golang", DECKS) == (False, "Coding")
+    assert config_ops.sharp_for_deck(new, "HSK", DECKS) is True
+    new, _, _, _ = apply([{"set_deck_sharp": {"deck": "Coding::Languages", "on": "on"}}], cfg=new, decks=DECKS)
+    assert config_ops.sharp_source(new, "Coding::Languages::Golang", DECKS) == (True, "Coding::Languages")
+    new, log, _, _ = apply([{"set_deck_sharp": {"deck": "Coding", "on": None}}], cfg=new, decks=DECKS)
+    assert new["deck_sharp"] == {"2": True} and log == ["✓ sharp questions for Coding: follow parent (default on)"]
+
+
+def test_prune_drops_missing_decks_from_prompts_and_sharp():
+    cfg = dict(BASE, deck_prompts={"1": "x", "9": "y"}, deck_sharp={"9": False, "4": True})
+    out = config_ops.prune_deck_prompts(cfg, {"1", "4"})
+    assert out["deck_prompts"] == {"1": "x"} and out["deck_sharp"] == {"4": True}
+
+
+def test_config_prompt_shows_deck_sharp():
+    cfg = dict(BASE, deck_sharp={"1": False})
+    p = config_ops.config_prompt(cfg, "ok", "hi", decks=DECKS, selected="Coding::Languages")
+    assert "- Coding: off" in p and "Sharp questions here: off" in p
+
+
 @pytest.mark.parametrize("change,msg", [
+    ({"set_deck_sharp": {"deck": "HSK", "on": "maybe"}}, "true or false"),
+    ({"set_deck_sharp": {"deck": "HSK", "on": None}}, "no sharp questions setting"),
     ({"set_deck_prompt": {"deck": "Golang", "prompt": "x"}}, "ambiguous"),
     ({"set_deck_prompt": {"deck": "Nope", "prompt": "x"}}, "no deck named"),
     ({"set_deck_prompt": {"deck": "HSK", "prompt": " "}}, "empty deck prompt"),
@@ -164,9 +189,8 @@ def test_claude_path_auto_values_reset_to_autodetect(value):
 
 def test_toggle_flips_and_defaults_on():
     assert config_ops.toggle_change({"missed_append": True}, "missed_append") == {"set": {"missed_append": False}}
-    assert config_ops.toggle_change({}, "sharp_questions") == {"set": {"sharp_questions": False}}  # missing = on
-    assert config_ops.toggle_change({"sharp_questions": False}, "sharp_questions") == {"set": {"sharp_questions": True}}
-    assert config_ops.toggle_on({}, "sharp_questions") is True
+    assert config_ops.toggle_change({}, "missed_append") == {"set": {"missed_append": False}}  # missing = on
+    assert config_ops.toggle_on({}, "missed_append") is True
     with pytest.raises(KeyError):
         config_ops.toggle_change({}, "provider")
     for key, (label, tip) in config_ops.TOGGLES.items():

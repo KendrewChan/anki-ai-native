@@ -7,9 +7,9 @@
     "claude_path": "",
     "codex_path": "",
     "missed_append": true,
-    "sharp_questions": true,
     "ask_timeout_s": 30,
     "grade_timeout_s": 60,
     "custom": [],
-    "deck_prompts": {}
+    "deck_prompts": {},
+    "deck_sharp": {}
 }

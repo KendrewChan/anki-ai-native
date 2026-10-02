@@ -47,7 +47,7 @@ Everything that doesn't import `aqt` is unit-tested with plain pytest.
 Only active while **AI Study** is ON. The ON/OFF link is on the home screen, on the deck overview and in **Tools → AI Study mode**. It is off at every Anki start. Off means the plain reviewer runs and no AI process starts; turning it off kills the session. The flow is display-only, through `gui_hooks.card_will_show`: nothing is written to the card except the Missed section.
 
 **Question side**
-- With `sharp_questions` on (default), an ask request returns `{"questions": [1–4]}`, one per distinct point the card bundles. Otherwise the card's own question is used.
+- Sharp questions are on by default and set per deck (see Deck Prompts in Settings). When on for the card's home deck, an ask request returns `{"questions": [1–4]}`, one per distinct point the card bundles. Otherwise the card's own question is used.
 - Cloze cards always use their own blanked question.
 - Layout: a collapsed **Show original** (Anki's normal question) at the top, then a question + answer box pair for each question. With sharp questions, no box is shown until `ask` returns (only "Thinking of a sharp question…"). If `ask` fails, one box appears under the opened original. Without sharp questions (or for cloze), the original is shown with its box ready at once.
 - **Enter** moves to the next box; Enter in the last box submits all. **Shift+Enter** inserts a newline. Enter with every box empty shows the plain answer, with no verdict.
@@ -71,18 +71,19 @@ Only active while **AI Study** is ON. The ON/OFF link is on the home screen, on 
 
 A main-window state (`aiStudyConfig`, **← Back** → deck list).
 
-- **Chat**: each message goes to a separate CLI call; the AI replies `{"reply", "changes"}`. `config_ops.apply_changes` validates each change: `set` known keys with type/range checks, `add_custom` / `remove_custom`, `set_deck_prompt` / `clear_deck_prompt`, `undo` (snapshot restore), `login` / `logout`. Saving uses `addonManager.writeConfig`.
+- **Chat**: each message goes to a separate CLI call; the AI replies `{"reply", "changes"}`. `config_ops.apply_changes` validates each change: `set` known keys with type/range checks, `add_custom` / `remove_custom`, `set_deck_prompt` / `clear_deck_prompt`, `set_deck_sharp` (`on`: true / false / null = follow parent), `undo` (snapshot restore), `login` / `logout`. Saving uses `addonManager.writeConfig`.
 - The log shows the latest 3 replies; rejected changes appear in red inside the reply. The Settings AI gets the real model in use, never lists or guesses model names, and points to the Model dropdown.
 - **Configurations**:
   - Provider and Model rows: dropdowns. The model list is loaded live from the CLI and never stored.
   - Login state, timeouts, and the CLI version with **Update**.
-  - **Sharp questions** and **Missed append**: On/Off toggles. `config_ops.TOGGLES` is the single source for each toggle's label and help text. Clicks go through `apply_changes`. Each toggle has a CSS **?** help bubble.
+  - **Missed append**: On/Off toggle. `config_ops.TOGGLES` is the single source for each toggle's label and help text. Clicks go through `apply_changes`. Each toggle has a CSS **?** help bubble.
   - Plain controls always work, even when the provider's AI is broken.
 - **Custom Generic Rules**: numbered rules, applied to every card.
 - **Deck Prompts**:
   - The real deck tree, with ● marking decks that have a prompt.
-  - Selecting a deck shows its own prompt and the ones it inherits.
-  - Stored as `deck_prompts: {deck_id: prompt}`, so prompts survive deck renames. Prompts of deleted decks are pruned on save.
+  - Selecting a deck shows its own prompt, the ones it inherits, and whether sharp questions are on there (and which deck decides it).
+  - Sharp questions per deck: `deck_sharp: {deck_id: bool}`. The innermost deck on the path with a setting wins; none = on. A deck prompt can't switch them: the decision is made before any AI call, so the Settings AI uses `set_deck_sharp`. The old global `sharp_questions` key is dropped on the next settings change.
+  - Stored as `deck_prompts: {deck_id: prompt}`, so prompts survive deck renames. Prompts and sharp settings of deleted decks are pruned on save.
   - Deck names resolve exact → case-insensitive → unique leaf name; anything else is rejected.
 - Changes apply from the next review session. Unsent drafts and in-flight replies survive leaving the page (in memory until Anki restarts).
 
