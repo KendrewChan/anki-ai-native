@@ -55,8 +55,11 @@ def session():
     return S.session
 
 
-def active() -> bool:
-    return S.enabled and not S.disabled
+def active(card=None) -> bool:
+    """AI Study on (and not disabled by failures) — and, given a card, on for its home deck."""
+    if not (S.enabled and not S.disabled):
+        return False
+    return card is None or config_ops.deck_toggle_on(cfg(), "ai", home_deck(card), deck_ids())
 
 
 def home_deck(card) -> str:
@@ -73,7 +76,7 @@ def rewrite_enabled(card) -> bool:
     """Ask the AI for sharp questions first? Not for cloze cards, nor when turned off (globally or for the deck)."""
     if card.note_type()["type"] == MODEL_CLOZE:
         return False
-    return config_ops.sharp_for_deck(cfg(), home_deck(card), deck_ids())
+    return config_ops.deck_toggle_on(cfg(), "sharp", home_deck(card), deck_ids())
 
 
 def eval_card(js: str):
@@ -91,7 +94,7 @@ def on_error(err) -> str:
 # --- hooks ---
 
 def on_card_will_show(text: str, card, kind: str) -> str:
-    if kind == "reviewQuestion" and active():
+    if kind == "reviewQuestion" and active(card):
         return ui.question_html(text, rewrite_enabled(card))
     if kind == "reviewAnswer" and card.id in S.verdicts:
         return ui.verdict_html(*S.verdicts[card.id]) + text
@@ -101,7 +104,7 @@ def on_card_will_show(text: str, card, kind: str) -> str:
 def on_show_question(card):
     S.card_id = card.id
     S.verdicts.pop(card.id, None)
-    if not active():
+    if not active(card):
         return
     q = grading.strip_html(card.question())
     a = grading.strip_html(grading.answer_only(card.answer()))

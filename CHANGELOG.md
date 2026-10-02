@@ -2,6 +2,12 @@
 
 What changed in each version, newest first. How the add-on works today is in [docs/spec.md](docs/spec.md).
 
+## v1.14 — AI Study per deck; deck panel under the deck (2026-10-02)
+
+- New **AI Study** On/Off button per deck (on by default, same follow/exception rules as Sharp questions): off = that deck's cards use Anki's plain reviewer while AI Study is ON. Also via chat ("no AI for this deck").
+- The deck panel opens directly under the clicked deck instead of below the whole tree.
+- Fix: pressing a toggle or button in Settings no longer jumps the page back to the top.
+
 ## v1.13 — Sharp questions per deck (2026-10-02)
 
 - Sharp questions are now set **per deck**: an On/Off button in the deck panel (or tell Settings "no sharp questions for this deck"). On by default. Switching a deck makes all its subdecks follow; a subdeck switched afterwards stays an exception until a parent is switched again.

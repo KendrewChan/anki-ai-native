@@ -118,15 +118,15 @@ def test_deck_prompt_survives_rename_because_keyed_by_id():
 
 def test_deck_sharp_override_inherited_innermost_wins():
     cfg = dict(BASE)
-    assert config_ops.sharp_source(cfg, "Coding::Languages::Golang", DECKS) == (True, None)  # default on
+    assert config_ops.deck_toggle_source(cfg, "sharp", "Coding::Languages::Golang", DECKS) == (True, None)  # default on
     new, log, _, _ = apply([{"set_deck_sharp": {"deck": "Coding", "on": False}}], cfg=cfg, decks=DECKS)
-    assert new["deck_sharp"] == {"1": False} and log == ["✓ sharp questions for Coding and its subdecks: off"]
-    assert config_ops.sharp_source(new, "Coding::Languages::Golang", DECKS) == (False, "Coding")
-    assert config_ops.sharp_for_deck(new, "HSK", DECKS) is True
+    assert new["deck_sharp"] == {"1": False} and log == ["✓ Sharp questions for Coding and its subdecks: off"]
+    assert config_ops.deck_toggle_source(new, "sharp", "Coding::Languages::Golang", DECKS) == (False, "Coding")
+    assert config_ops.deck_toggle_on(new, "sharp", "HSK", DECKS) is True
     new, _, _, _ = apply([{"set_deck_sharp": {"deck": "Coding::Languages", "on": "on"}}], cfg=new, decks=DECKS)
-    assert config_ops.sharp_source(new, "Coding::Languages::Golang", DECKS) == (True, "Coding::Languages")
+    assert config_ops.deck_toggle_source(new, "sharp", "Coding::Languages::Golang", DECKS) == (True, "Coding::Languages")
     new, log, _, _ = apply([{"set_deck_sharp": {"deck": "Coding", "on": None}}], cfg=new, decks=DECKS)
-    assert new["deck_sharp"] == {"2": True} and log == ["✓ sharp questions for Coding: follow parent (default on)"]
+    assert new["deck_sharp"] == {"2": True} and log == ["✓ Sharp questions for Coding: follow parent (default on)"]
 
 
 def test_deck_sharp_parent_change_makes_subdecks_follow_others_kept():
@@ -140,26 +140,37 @@ def test_deck_sharp_parent_change_makes_subdecks_follow_others_kept():
 
 def test_deck_sharp_change_flips_effective_value():
     cfg = dict(BASE, deck_sharp={"1": False})
-    assert config_ops.deck_sharp_change(cfg, "Coding::Languages", DECKS) == {
+    assert config_ops.deck_toggle_change(cfg, "sharp", "Coding::Languages", DECKS) == {
         "set_deck_sharp": {"deck": "Coding::Languages", "on": True}}
-    assert config_ops.deck_sharp_change(cfg, "HSK", DECKS) == {"set_deck_sharp": {"deck": "HSK", "on": False}}
+    assert config_ops.deck_toggle_change(cfg, "sharp", "HSK", DECKS) == {"set_deck_sharp": {"deck": "HSK", "on": False}}
+
+
+def test_deck_ai_toggle_independent_and_cascades():
+    cfg = dict(BASE, deck_sharp={"1": False}, deck_ai={"3": False})
+    new, log, _, _ = apply([{"set_deck_ai": {"deck": "Coding", "on": False}}], cfg=cfg, decks=DECKS)
+    assert new["deck_ai"] == {"1": False} and new["deck_sharp"] == {"1": False}
+    assert log[0].startswith("✓ AI Study for Coding and its subdecks: off")
+    assert config_ops.deck_toggle_on(new, "ai", "Coding::Languages::Golang", DECKS) is False
+    assert config_ops.deck_toggle_on(new, "ai", "HSK", DECKS) is True
+    assert config_ops.deck_toggle_change(new, "ai", "HSK", DECKS) == {"set_deck_ai": {"deck": "HSK", "on": False}}
+    assert "set_deck_ai" in config_ops.CONFIG_SYSTEM_PROMPT
 
 
 def test_prune_drops_missing_decks_from_prompts_and_sharp():
-    cfg = dict(BASE, deck_prompts={"1": "x", "9": "y"}, deck_sharp={"9": False, "4": True})
+    cfg = dict(BASE, deck_prompts={"1": "x", "9": "y"}, deck_sharp={"9": False, "4": True}, deck_ai={"9": False})
     out = config_ops.prune_deck_prompts(cfg, {"1", "4"})
-    assert out["deck_prompts"] == {"1": "x"} and out["deck_sharp"] == {"4": True}
+    assert out["deck_prompts"] == {"1": "x"} and out["deck_sharp"] == {"4": True} and out["deck_ai"] == {}
 
 
 def test_config_prompt_shows_deck_sharp():
     cfg = dict(BASE, deck_sharp={"1": False})
     p = config_ops.config_prompt(cfg, "ok", "hi", decks=DECKS, selected="Coding::Languages")
-    assert "- Coding: off" in p and "Sharp questions here: off" in p
+    assert "- Coding: Sharp questions off" in p and "Sharp questions off" in p
 
 
 @pytest.mark.parametrize("change,msg", [
     ({"set_deck_sharp": {"deck": "HSK", "on": "maybe"}}, "true or false"),
-    ({"set_deck_sharp": {"deck": "HSK", "on": None}}, "no sharp questions setting"),
+    ({"set_deck_sharp": {"deck": "HSK", "on": None}}, "no Sharp questions setting"),
     ({"set_deck_prompt": {"deck": "Golang", "prompt": "x"}}, "ambiguous"),
     ({"set_deck_prompt": {"deck": "Nope", "prompt": "x"}}, "no deck named"),
     ({"set_deck_prompt": {"deck": "HSK", "prompt": " "}}, "empty deck prompt"),

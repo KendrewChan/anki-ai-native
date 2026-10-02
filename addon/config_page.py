@@ -34,7 +34,7 @@ CSS = chat_page.CSS + """
 .tree summary { cursor: pointer; } .tree .leaf { padding-left: 1em; }
 .tree a { cursor: pointer; } .tree a.sel { font-weight: 700; text-decoration: underline; }
 .tree .dot { color: #27864a; font-size: 0.8em; margin-left: 0.3em; }
-.panel { margin-top: 0.7em; padding: 0.6em 0.8em; border: 1px solid #8884; border-radius: 6px; }
+.panel { margin: 0.3em 0 0.5em; padding: 0.6em 0.8em; border: 1px solid #8884; border-radius: 6px; }
 .panel .name { font-weight: 600; margin-bottom: 0.3em; } .panel .inh { opacity: 0.75; margin-top: 0.3em; }
 .panel .p { white-space: pre-wrap; }
 </style>
@@ -47,12 +47,14 @@ window.aiCfg = {
     const log = document.getElementById("log");
     log.innerHTML = logHtml; log.scrollTop = log.scrollHeight;
     const sections = document.getElementById("sections");
+    const y = window.scrollY;  // keep the view where the user clicked
     const open = new Set(Array.from(sections.querySelectorAll("details[open]")).map(d => d.dataset.deck));
     sections.innerHTML = sectionsHtml;
     sections.querySelectorAll("details").forEach(d => { if (open.has(d.dataset.deck)) d.open = true; });
     document.getElementById("status").textContent = status;
     const cmd = document.getElementById("cmd");
-    cmd.disabled = busy; if (!busy) cmd.focus();
+    cmd.disabled = busy; if (!busy) cmd.focus({preventScroll: true});
+    window.scrollTo(0, y);
   },
   loadModels(e, sel) {
     if (sel.dataset.loaded) return;
@@ -146,9 +148,11 @@ class ConfigPage(ChatPage):
         elif command == "toggle" and arg in config_ops.TOGGLES:
             self.apply([config_ops.toggle_change(self.cfg(), arg)])
             self._update(None)
-        elif command == "decksharp" and arg in deck_ids():
-            self.apply([config_ops.deck_sharp_change(self.cfg(), arg, deck_ids())])
-            self._update(None)
+        elif command == "decktoggle":
+            toggle, _, deck = arg.partition(":")
+            if toggle in config_ops.DECK_TOGGLES and deck in deck_ids():
+                self.apply([config_ops.deck_toggle_change(self.cfg(), toggle, deck, deck_ids())])
+                self._update(None)
         elif command == "provider":
             self.apply([{"set": {"provider": arg}}])
             self._update(None)
@@ -373,12 +377,34 @@ class ConfigPage(ChatPage):
         return label, button, f'<span class="help" tabindex="0">?<span class="tip">{lines}</span></span>'
 
 
+    @staticmethod
+    def _deck_toggle(cfg, toggle: str, sel: str, decks: dict) -> str:
+        """'<label>: [On/Off] (from <parent> | default) — subdecks follow' for the selected deck."""
+        on, src = config_ops.deck_toggle_source(cfg, toggle, sel, decks)
+        where = "" if src == sel else f" (from {src})" if src else " (default)"
+        js = html.escape(f"pycmd({json.dumps(f'aiCfg:decktoggle:{toggle}:{sel}')})", quote=True)
+        return (f'<div class="inh">{config_ops.DECK_TOGGLES[toggle][1]}: '
+                f'<button class="tog{" on" if on else ""}" onclick="{js}">{"On" if on else "Off"}</button>'
+                f'{html.escape(where)} — subdecks follow</div>')
+
     def _deck_html(self, cfg) -> str:
         decks = deck_ids()
         prompts = cfg.get("deck_prompts") or {}
         names = sorted(decks, key=lambda n: n.lower())
         sel = self.selected if self.selected in decks else None
         ancestors = {"::".join(sel.split("::")[:i]) for i in range(1, sel.count("::") + 1)} if sel else set()
+
+        if sel:
+            own = prompts.get(decks[sel], "").strip()
+            chain = [(n, p) for n, p in config_ops.deck_chain(sel, decks, prompts) if n != sel]
+            inh = "".join(f'<div class="inh">↳ {html.escape(n)}: <span class="p">{html.escape(p)}</span></div>'
+                          for n, p in chain)
+            toggles = "".join(self._deck_toggle(cfg, t, sel, decks) for t in config_ops.DECK_TOGGLES)
+            panel = (f'<div class="panel"><div class="name">{html.escape(sel)}</div>'
+                     f'<div class="p">{html.escape(own) if own else "<i>no prompt — tell the AI what this deck needs</i>"}</div>'
+                     f'{inh}{toggles}</div>')
+        else:
+            panel = ""
 
         def node(name: str) -> str:
             depth = name.count("::") + 1
@@ -388,29 +414,16 @@ class ConfigPage(ChatPage):
             cls = ' class="sel"' if name == sel else ""
             js = html.escape(f"pycmd({json.dumps('aiCfg:select:' + name)});event.preventDefault();", quote=True)
             link = f'<a{cls} onclick="{js}">{label}</a>{dot}'
+            here = panel if name == sel else ""  # the selected deck's panel sits right under it
             if not kids:
-                return f'<div class="leaf">{link}</div>'
-            is_open = " open" if name in ancestors else ""
-            return (f'<details data-deck="{html.escape(name)}"{is_open}><summary>{link}</summary>'
+                return f'<div class="leaf">{link}{here}</div>'
+            is_open = " open" if name in ancestors or name == sel else ""
+            return (f'<details data-deck="{html.escape(name)}"{is_open}><summary>{link}</summary>{here}'
                     + "".join(node(k) for k in kids) + "</details>")
 
         tree = "".join(node(n) for n in names if "::" not in n)
-        if sel:
-            own = prompts.get(decks[sel], "").strip()
-            chain = [(n, p) for n, p in config_ops.deck_chain(sel, decks, prompts) if n != sel]
-            inh = "".join(f'<div class="inh">↳ {html.escape(n)}: <span class="p">{html.escape(p)}</span></div>'
-                          for n, p in chain)
-            on, src = config_ops.sharp_source(cfg, sel, decks)
-            where = "" if src == sel else f" (from {src})" if src else " (default)"
-            js = html.escape(f"pycmd({json.dumps('aiCfg:decksharp:' + sel)})", quote=True)
-            sharp = (f'<div class="inh">Sharp questions: <button class="tog{" on" if on else ""}" onclick="{js}">'
-                     f'{"On" if on else "Off"}</button>{html.escape(where)} — subdecks follow</div>')
-            panel = (f'<div class="panel"><div class="name">{html.escape(sel)}</div>'
-                     f'<div class="p">{html.escape(own) if own else "<i>no prompt — tell the AI what this deck needs</i>"}</div>'
-                     f'{inh}{sharp}</div>')
-        else:
-            panel = '<div class="panel" style="opacity:.6">Click a deck to see its prompt.</div>'
-        return f'<div class="tree">{tree}</div>{panel}'
+        hint = "" if sel else '<div class="panel" style="opacity:.6">Click a deck to see its prompt.</div>'
+        return f'<div class="tree">{tree}</div>{hint}'
 
 
     def _page_html(self) -> str:

@@ -11,5 +11,6 @@
     "grade_timeout_s": 60,
     "custom": [],
     "deck_prompts": {},
+    "deck_ai": {},
     "deck_sharp": {}
 }
