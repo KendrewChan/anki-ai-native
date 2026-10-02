@@ -37,8 +37,14 @@ CSS = chat_page.CSS + """
 .panel { margin: 0.3em 0 0.5em; padding: 0.6em 0.8em; border: 1px solid #8884; border-radius: 6px; }
 .panel .name { font-weight: 600; margin-bottom: 0.3em; } .panel .inh { opacity: 0.75; margin-top: 0.3em; }
 .panel .p { white-space: pre-wrap; }
+#cmd-bar { position: sticky; top: 0; z-index: 5; padding: 0.4em 0; background: var(--canvas, Canvas); }
 </style>
 """
+
+def deck_prefix(deck: str) -> str:
+    """Chat-box start when a deck is clicked under Deck Settings."""
+    return f'Deck prompt for "{deck}": '
+
 
 JS = """
 <script>
@@ -55,6 +61,16 @@ window.aiCfg = {
     const cmd = document.getElementById("cmd");
     cmd.disabled = busy; if (!busy) cmd.focus({preventScroll: true});
     window.scrollTo(0, y);
+  },
+  prefill(prefix) {  // clicking a deck starts a message about it, unless the user already typed their own
+    const cmd = document.getElementById("cmd"), v = cmd.value;
+    if (!v.trim()) cmd.value = prefix;
+    else if (this.prefix && v.startsWith(this.prefix)) cmd.value = prefix + v.slice(this.prefix.length);
+    else return;
+    this.prefix = prefix;
+    cmd.focus({preventScroll: true});
+    cmd.setSelectionRange(cmd.value.length, cmd.value.length);
+    cmd.dispatchEvent(new Event("input"));  // keep the saved draft in step
   },
   loadModels(e, sel) {
     if (sel.dataset.loaded) return;
@@ -140,6 +156,8 @@ class ConfigPage(ChatPage):
         if command == "select":
             self.selected = arg
             self._update(None)
+            if mw.state == self.STATE and arg:
+                mw.web.eval(f"window.aiCfg && aiCfg.prefill({json.dumps(deck_prefix(arg))});")
         elif command == "models":
             self._load_models()
         elif command == "model":
@@ -433,6 +451,6 @@ class ConfigPage(ChatPage):
             f'{CSS}<div id="cfg"><a class="back" onclick="pycmd(\'aiCfg:back\')">← Back</a>'
             f"<h2>AI Study settings</h2>"
             f'<div id="log">{self._log_html()}</div>'
-            f'<input id="cmd" value="{html.escape(self.draft)}" placeholder="Tell the AI what to change…">'
-            f'<div id="status"></div><div id="sections">{self._sections_html()}</div></div>{JS}'
+            f'<div id="cmd-bar"><input id="cmd" value="{html.escape(self.draft)}" placeholder="Tell the AI what to change…">'
+            f'<div id="status"></div></div><div id="sections">{self._sections_html()}</div></div>{JS}'
         )

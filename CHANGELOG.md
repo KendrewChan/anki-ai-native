@@ -2,6 +2,10 @@
 
 What changed in each version, newest first. How the add-on works today is in [docs/spec.md](docs/spec.md).
 
+## v1.28 — Quick deck prompts (2026-10-02)
+
+- Clicking a deck under Deck Settings fills the chat box with `Deck prompt for "<deck>": ` and puts the cursor at the end. Your own typed message is never overwritten. The chat box now stays pinned at the top while you scroll.
+
 ## v1.27 — Clearer tutor prompt; renames (2026-10-02)
 
 - The tutor prompt is rewritten as principles. It describes once what the user sees (questions, one box each, parts, hints), and the patch-style rules from earlier fixes are folded into general ones, e.g. "verdicts agree upward". Behaviour and the reply format are unchanged.

@@ -94,6 +94,7 @@ A main-window state (`aiStudyConfig`, **← Back** → deck list).
   - Plain controls always work, even when the provider's AI is broken.
 - **Custom Generic Rules**: numbered rules, applied to every card.
 - **Deck Settings**:
+  - Clicking a deck starts the chat box with `Deck prompt for "<deck>": ` and focuses it (`config_page.deck_prefix`). Clicking another deck swaps the prefix and keeps anything typed after it. A message the user wrote themselves is never replaced. The chat box is pinned to the top while the page scrolls.
   - The real deck tree, with ● marking decks that have a prompt.
   - Selecting a deck shows its panel directly under it in the tree (a selected parent expands): its own prompt, the ones it inherits, and the deck toggles with which deck decides each.
   - Deck toggles (`config_ops.DECK_TOGGLES`): **AI Study** (`deck_ai`; off = plain reviewer for that deck's cards) and **Rewrite question** (`deck_sharp`), each `{deck_id: bool}`. The innermost deck on the path with a setting wins; none = on. Each panel On/Off button flips the selected deck's effective value. Setting a deck (button or chat) drops its subdecks' own settings, so they follow it at once. A subdeck set afterwards stays as an exception until one of its ancestors is set again. Updates keep the page's scroll position. A deck prompt can't switch them: the decision is made before any AI call, so the Settings AI uses `set_deck_sharp`. The old global `sharp_questions` key is dropped on the next settings change.
