@@ -109,3 +109,13 @@ def test_ai_edit_unapproves(col):
     gc.approve(col)
     gc.approve(col, ok=False)
     assert gc.staged(col)[0]["ok"] is False
+
+
+def test_big_batch_is_one_undo_step(col):
+    """Anki keeps ~30 undo steps; a per-card op loop overflowed it ("target undo op not found")."""
+    stage(col, [{"add": {"deck": f"Big::D{i % 3}", "front": f"q{i}", "back": "a"}} for i in range(60)])
+    gc.approve(col)
+    _, counts = gc.submit(col)
+    assert counts == {"updated": 0, "added": 60} and gc.staged(col) == []
+    col.undo()  # the whole Submit is one step: everything is back in AI-GEN, still approved
+    assert len(gc.staged(col)) == 60 and all(s["ok"] for s in gc.staged(col))
