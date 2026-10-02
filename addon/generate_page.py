@@ -32,7 +32,9 @@ CSS = CONFIG_CSS + """
 .stg .main { flex: 1; min-width: 0; } .stg .q { white-space: pre-wrap; overflow-wrap: anywhere; }
 .stg .plain { padding-left: 1.05em; } .stg .acts { white-space: nowrap; }
 .stg .acts button { font-size: 0.8em; margin-left: 0.3em; }
-.stg .card.ok .q { opacity: 0.75; } .stg .okmark { color: #27864a; font-size: 0.8em; font-weight: 600; }
+.stg .card.ok .q { opacity: 0.75; }
+.stg .card .v-orig, .stg .card.orig .v-upd, .stg .card .l-orig, .stg .card.orig .l-upd { display: none; }
+.stg .card.orig .v-orig, .stg .card.orig .l-orig { display: inline; } .stg .card.orig .v-orig { display: block; } .stg .okmark { color: #27864a; font-size: 0.8em; font-weight: 600; }
 .stg .btns .submit { font-weight: 700; margin-left: 1em; } .stg .hint { font-size: 0.8em; opacity: 0.6; margin-top: 0.3em; }
 #status.busy { opacity: 1; font-size: 0.95em; color: #2a6fd6; }
 .stg summary { cursor: pointer; }
@@ -55,6 +57,7 @@ window.aiGen = {
     const open = new Set(Array.from(stg.querySelectorAll("details[open]")).map(d => d.dataset.id));
     stg.innerHTML = stagedHtml;
     stg.querySelectorAll("details").forEach(d => { if (open.has(d.dataset.id)) d.open = true; });
+    stg.querySelectorAll(".card").forEach(c => { if (this.origs.has(c.dataset.card)) c.classList.add("orig"); });
     const st = document.getElementById("status");
     clearInterval(this.timer);
     if (busy) {
@@ -68,6 +71,12 @@ window.aiGen = {
     cmd.disabled = busy; if (!busy) cmd.focus();
   },
   setRef(path) { document.getElementById("ref").value = path; },
+  origs: new Set(),  // cards showing their original; kept across redraws
+  toggleOrig(btn) {
+    const card = btn.closest(".card");
+    const on = card.classList.toggle("orig");
+    if (on) this.origs.add(card.dataset.card); else this.origs.delete(card.dataset.card);
+  },
 };
 document.getElementById("cmd").addEventListener("keydown", function (e) {
   e.stopPropagation();
@@ -305,18 +314,21 @@ class GeneratePage:
                 out.append(f'<div class="deck">{html.escape(deck or "(no deck)")}<span class="acts">{approve}'
                            f'<button onclick="pycmd(\'aiGen:discard:{ids}\')">Discard deck</button></span></div>')
             kind = ('<span class="kind upd">UPDATE</span>' if s["of"] else '<span class="kind new">NEW</span>')
-            values = list(s["fields"].items())
-            question = f'{i}. {kind}<span class="q">{html.escape(strip_html(values[0][1]) if values else "")}</span>'
-            rest = "".join(f'<div class="fld"><b>{html.escape(k)}:</b> {html.escape(strip_html(v))}</div>'
-                           for k, v in values[1:] if v.strip())  # the question is already in the summary
-            body = (f'<details data-id="{s["id"]}"><summary>{question}</summary>{rest}</details>' if rest
-                    else f'<div class="plain">{question}</div>')
+            body = self._card_body(f'{i}. {kind}', s["fields"], str(s["id"]))
+            original = self._original(s["of"])
+            toggle = ""
+            if original is not None:  # both versions rendered; the button swaps them in the page, no round-trip
+                body = (f'<div class="v-upd">{body}</div><div class="v-orig">'
+                        f'{self._card_body(f"{i}. <span class=kind>ORIGINAL</span>", original, "o" + str(s["id"]))}</div>')
+                toggle = ('<button onclick="aiGen.toggleOrig(this)"><span class="l-upd">Show original</span>'
+                          '<span class="l-orig">Show update</span></button>')
             approve = (f'<span class="okmark">✓ Approved</span>'
                       f'<button onclick="pycmd(\'aiGen:unapprove:{s["id"]}\')">Unapprove</button>' if s["ok"]
                       else f'<button onclick="pycmd(\'aiGen:approve:{s["id"]}\')">Approve</button>')
             acts = (f'<span class="acts">{approve}'
-                    f'<button onclick="pycmd(\'aiGen:discard:{s["id"]}\')">Discard</button></span>')
-            out.append(f'<div class="card{" ok" if s["ok"] else ""}"><div class="main">{body}</div>{acts}</div>')
+                    f'<button onclick="pycmd(\'aiGen:discard:{s["id"]}\')">Discard</button>{toggle}</span>')
+            out.append(f'<div class="card{" ok" if s["ok"] else ""}" data-card="{s["id"]}">'
+                       f'<div class="main">{body}</div>{acts}</div>')
         ok = sum(1 for s in staged if s["ok"])
         pending = len(staged) - ok
         submit = (f'<button class="submit" onclick="pycmd(\'aiGen:submit\')">Submit {ok} approved</button>' if ok
@@ -326,6 +338,26 @@ class GeneratePage:
                    + f'<button onclick="pycmd(\'aiGen:discard\')">Discard all</button>{submit}</div>'
                    f'<div class="hint">Approved cards stay here until you Submit — keep generating meanwhile.</div>')
         return f'<div class="sect stg"><h3>{TEMP} — waiting for you</h3>{"".join(out)}{buttons}</div>'
+
+    @staticmethod
+    def _card_body(prefix: str, fields: dict, key: str) -> str:
+        """Question (first field) as the row, the other non-empty fields inside it when expanded."""
+        values = list(fields.items())
+        question = f'{prefix}<span class="q">{html.escape(strip_html(values[0][1]) if values else "")}</span>'
+        rest = "".join(f'<div class="fld"><b>{html.escape(k)}:</b> {html.escape(strip_html(v))}</div>'
+                       for k, v in values[1:] if v.strip())  # the question is already in the summary
+        return (f'<details data-id="{key}"><summary>{question}</summary>{rest}</details>' if rest
+                else f'<div class="plain">{question}</div>')
+
+    @staticmethod
+    def _original(note_id):
+        """The original note's fields for a staged update; None for new cards or a deleted original."""
+        if not note_id:
+            return None
+        try:
+            return dict(mw.col.get_note(note_id).items())
+        except Exception:  # NotFoundError: original deleted meanwhile — Submit then adds the copy as new
+            return None
 
     def _page_html(self) -> str:
         return (
