@@ -13,7 +13,7 @@ SETTINGS = {
     "ask_timeout_s": "seconds to wait for the sharp question (5-600)",
     "grade_timeout_s": "seconds to wait for a grade (5-600)",
     "missed_append": "true/false — append Missed bullets to the card's Back after grading",
-    "claude_path": "absolute path to the claude CLI executable",
+    "claude_path": "absolute path to the claude CLI executable, or \"\" to auto-detect",
 }
 
 CONFIG_SYSTEM_PROMPT = """You manage the settings of an Anki add-on that uses Claude as a flashcard tutor. The user talks to you in plain language; you turn requests into changes.
@@ -134,6 +134,8 @@ def _validate(key: str, value, is_executable):
             return False
         raise ValueError("missed_append must be true or false")
     if key == "claude_path":
+        if str(value).strip().lower() in ("", "auto"):
+            return ""
         v = os.path.expanduser(str(value).strip())
         if not is_executable(v):
             raise ValueError(f"{v} is not an executable file")

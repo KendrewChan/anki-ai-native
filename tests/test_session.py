@@ -79,3 +79,21 @@ def test_stop_drops_pending_callbacks(sess):
     after = call(sess, "after-stop")
     assert after["result"]["n"] == 1  # new process after stop
     assert fired == []
+
+
+def test_find_claude_prefers_configured_path():
+    from addon.session import find_claude
+    assert find_claude("~/bin/my-claude") == os.path.expanduser("~/bin/my-claude")
+
+
+def test_find_claude_checks_install_locations_when_path_is_bare(monkeypatch, tmp_path):
+    from addon import session
+    fake = tmp_path / "claude"
+    fake.write_text("#!/bin/sh\n")
+    fake.chmod(0o755)
+    monkeypatch.setattr(session.shutil, "which", lambda _name: None)  # Dock-launched Anki: no shell PATH
+    monkeypatch.setattr(session, "CLAUDE_CANDIDATES", ["/nope/claude", str(fake)])
+    assert session.find_claude("") == str(fake)
+    assert session.find_claude("auto") == str(fake)
+    monkeypatch.setattr(session, "CLAUDE_CANDIDATES", [])
+    assert session.find_claude("") == "claude"

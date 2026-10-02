@@ -1,7 +1,9 @@
 """One long-running `claude -p` stream-json process per study session. No Anki imports."""
 
 import json
+import os
 import queue
+import shutil
 import subprocess
 import threading
 from collections import deque
@@ -18,6 +20,39 @@ ISOLATION_FLAGS = [
     "--disable-slash-commands",
     "--no-session-persistence",
 ]
+
+
+# Anki started from the Dock/Start menu doesn't inherit the shell PATH, so look in the usual install spots too.
+CLAUDE_CANDIDATES = [
+    "~/.local/bin/claude",
+    "~/.claude/local/claude",
+    "/opt/homebrew/bin/claude",
+    "/usr/local/bin/claude",
+    "/usr/bin/claude",
+    "~/.local/bin/claude.exe",
+    "~/AppData/Roaming/npm/claude.cmd",
+]
+
+
+def _is_executable(path: str) -> bool:
+    return os.path.isfile(path) and os.access(path, os.X_OK)
+
+
+def find_claude(configured: str = "") -> str:
+    """configured path if set and executable, else PATH, else the usual install locations.
+
+    Falls back to plain "claude" so the error message names what was tried.
+    """
+    if configured and configured.strip().lower() != "auto":
+        return os.path.expanduser(configured.strip())
+    found = shutil.which("claude")
+    if found:
+        return found
+    for cand in CLAUDE_CANDIDATES:
+        path = os.path.expanduser(cand)
+        if _is_executable(path):
+            return path
+    return "claude"
 
 
 def build_command(claude_path: str, model: str, system_prompt: str) -> list:

@@ -14,7 +14,7 @@ from aqt.reviewer import Reviewer
 
 from . import config_ops, grading, ui
 from .config_page import ConfigPage
-from .session import ClaudeSession, build_command
+from .session import ClaudeSession, build_command, find_claude
 
 ADDON = __name__.split(".")[0]
 
@@ -48,7 +48,7 @@ def session() -> ClaudeSession:
     if S.session is None:
         c = cfg()
         S.cwd = S.cwd or tempfile.mkdtemp(prefix="anki_ai_")
-        cmd = build_command(c.get("claude_path", "claude"), c.get("model", "sonnet"),
+        cmd = build_command(find_claude(c.get("claude_path", "")), c.get("model", "sonnet"),
                             grading.system_prompt(c.get("custom")))
         S.session = ClaudeSession(cmd, S.cwd, mw.taskman.run_on_main)
     return S.session

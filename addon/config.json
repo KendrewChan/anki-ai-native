@@ -1,5 +1,5 @@
 {
-    "claude_path": "~/.local/bin/claude",
+    "claude_path": "",
     "model": "sonnet",
     "missed_append": true,
     "ask_timeout_s": 30,

@@ -9,7 +9,7 @@ import threading
 from aqt import mw
 
 from . import config_ops
-from .session import ClaudeSession, build_command
+from .session import ClaudeSession, build_command, find_claude
 
 STATE = "aiStudyConfig"
 
@@ -149,13 +149,13 @@ class ConfigPage:
     def _session(self, cfg) -> ClaudeSession:
         if self.session is None:
             self.cwd = self.cwd or tempfile.mkdtemp(prefix="anki_ai_cfg_")
-            cmd = build_command(cfg.get("claude_path", "claude"), cfg.get("model", "sonnet"),
+            cmd = build_command(find_claude(cfg.get("claude_path", "")), cfg.get("model", "sonnet"),
                                 config_ops.CONFIG_SYSTEM_PROMPT)
             self.session = ClaudeSession(cmd, self.cwd, mw.taskman.run_on_main)
         return self.session
 
     def _refresh_auth(self):
-        path = self._cfg().get("claude_path", "claude")
+        path = find_claude(self._cfg().get("claude_path", ""))
 
         def work():
             try:
@@ -177,7 +177,7 @@ class ConfigPage:
 
     def _run_auth(self, action: str):
         """login opens the browser via Claude Code's own flow; the add-on never sees credentials."""
-        path = self._cfg().get("claude_path", "claude")
+        path = find_claude(self._cfg().get("claude_path", ""))
         note = {"login": "Opening your browser to sign in to Claude…",
                 "logout": "Logging out of Claude (this also signs out Claude Code on this Mac)…"}[action]
         self.transcript.append(("ai", note))
@@ -230,9 +230,10 @@ class ConfigPage:
         rows = [("Login", login)] + [
             (label, html.escape(str(cfg.get(key))))
             for label, key in (("Model", "model"), ("Ask timeout (s)", "ask_timeout_s"),
-                               ("Grade timeout (s)", "grade_timeout_s"),
-                               ("Missed append", "missed_append"), ("Claude path", "claude_path"))
+                               ("Grade timeout (s)", "grade_timeout_s"), ("Missed append", "missed_append"))
         ]
+        path = cfg.get("claude_path") or ""
+        rows.append(("Claude path", html.escape(path if path and path != "auto" else f"auto → {find_claude()}")))
         table = "".join(f'<tr><td class="k">{k}</td><td>{v}</td></tr>' for k, v in rows)
         custom = cfg.get("custom") or []
         rules = ("<ol>" + "".join(f"<li>{html.escape(r)}</li>" for r in custom) + "</ol>"

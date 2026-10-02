@@ -145,3 +145,9 @@ def test_card_prompts_carry_deck_rules():
     for p in (ask, grade):
         assert "Deck rules (outer → inner):\n- Coding: scenarios\n- Coding::Languages::Golang: code" in p
     assert "Deck rules" not in grading.ask_prompt("Q", "A")
+
+
+@pytest.mark.parametrize("value", ["", "auto", " AUTO "])
+def test_claude_path_auto_values_reset_to_autodetect(value):
+    new, log, _, _ = apply([{"set": {"claude_path": value}}], executable=False)
+    assert new["claude_path"] == ""
