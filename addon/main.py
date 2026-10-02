@@ -1,6 +1,7 @@
 """Anki wiring: reviewer hooks, the pycmd bridge, Missed append. Only module that imports aqt."""
 
 import datetime
+import json
 import tempfile
 
 from anki.consts import MODEL_CLOZE
@@ -23,8 +24,8 @@ class State:
     def reset(self):
         """Per review session."""
         self.card_id = None
-        self.ctx = {}  # card_id -> {"q", "a", "sharp"}
-        self.verdicts = {}  # card_id -> (verdict, user_answer)
+        self.ctx = {}  # card_id -> {"q", "a", "questions"}
+        self.verdicts = {}  # card_id -> (verdict, questions, answers)
         self.failures = 0
         self.disabled = None  # reason string once AI is off for this session
 
@@ -75,8 +76,7 @@ def on_card_will_show(text: str, card, kind: str) -> str:
     if kind == "reviewQuestion" and not S.disabled:
         return ui.question_html(text, rewrite_enabled(card))
     if kind == "reviewAnswer" and card.id in S.verdicts:
-        verdict, user_answer = S.verdicts[card.id]
-        return ui.verdict_html(verdict, user_answer) + text
+        return ui.verdict_html(*S.verdicts[card.id]) + text
     return text
 
 
@@ -87,11 +87,11 @@ def on_show_question(card):
         return
     q = grading.strip_html(card.question())
     a = grading.strip_html(grading.answer_only(card.answer()))
-    S.ctx[card.id] = {"q": q, "a": a, "sharp": ""}
+    S.ctx[card.id] = {"q": q, "a": a, "questions": []}
     if not rewrite_enabled(card):
         return
     c = cfg()
-    session().request(card.id, grading.ask_prompt(q, a), grading.parse_question,
+    session().request(card.id, grading.ask_prompt(q, a), grading.parse_questions,
                       c.get("ask_timeout_s", 30), on_asked)
 
 
@@ -102,8 +102,8 @@ def on_asked(card_id, result, err):
         eval_card(ui.js_call("askFailed", on_error(err)))
         return
     S.failures = 0
-    S.ctx[card_id]["sharp"] = result["question"]
-    eval_card(ui.js_call("setQuestion", result["question"]))
+    S.ctx[card_id]["questions"] = result["questions"]
+    eval_card(ui.js_call("setQuestions", result["questions"]))
 
 
 def on_js_message(handled, message: str, context):
@@ -117,13 +117,15 @@ def on_js_message(handled, message: str, context):
     return (True, None)
 
 
-def submit(user_answer: str):
+def submit(payload: str):
     card_id = S.card_id
     ctx = S.ctx.get(card_id)
     if ctx is None or S.disabled:
         mw.reviewer._showAnswer()
         return
-    prompt = grading.grade_prompt(ctx["q"], ctx["sharp"], ctx["a"], user_answer)
+    answers = [str(a) for a in json.loads(payload)]
+    questions = list(ctx["questions"])  # snapshot: what the user saw when submitting
+    prompt = grading.grade_prompt(ctx["q"], questions, ctx["a"], answers)
 
     def on_graded(cid, result, err):
         if cid != S.card_id or mw.reviewer.state != "question":
@@ -132,7 +134,7 @@ def submit(user_answer: str):
             eval_card(ui.js_call("gradeFailed", on_error(err)))
             return
         S.failures = 0
-        S.verdicts[cid] = (result, user_answer)
+        S.verdicts[cid] = (result, questions, answers)
         mw.reviewer._showAnswer()
         append_missed(result["missed"])
 

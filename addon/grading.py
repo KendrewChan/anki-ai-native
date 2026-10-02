@@ -8,16 +8,19 @@ SYSTEM_PROMPT = """You are a strict flashcard tutor inside Anki. The user studie
 
 Two kinds of message arrive:
 
-1. NEW CARD — you get the card's question and reference answer. Turn the question into ONE sharp, concrete question that forces out the key facts of the reference answer. Prefer a specific scenario or "explain X and why Y" over "tell me about X". Never leak the answer, and never steer toward a different point than the reference answer makes. If the question is already concrete, return it unchanged.
-   Reply: {"question": "<the question>"}
+1. NEW CARD — you get the card's question and reference answer. Turn the question into sharp, concrete questions that force out the key facts of the reference answer. Prefer a specific scenario or "explain X and why Y" over "tell me about X". Never leak the answer, and never steer toward a different point than the reference answer makes.
+   - Normally return ONE question. If the card bundles several distinct points (e.g. "X (a, b, c)" or "What is X? Why Y?"), return one question per point, at most 4.
+   - If the question is already a single concrete question, return it unchanged.
+   Reply: {"questions": ["<question>", ...]}
 
-2. GRADE — you get the card again plus the user's free-text answer. Judge ONLY against this card's reference answer; ignore earlier cards.
-   - verdict: "wrong" (missing or incorrect core idea), "partial" (core idea right, key facts missing), "correct" (all key facts).
+2. GRADE — you get the card again plus the user's free-text answer to each question asked. Judge ONLY against this card's reference answer; ignore earlier cards. Match each answer to its own question; a blank answer is wrong for that question.
+   - per_question: for each question in order, {"verdict": "wrong"|"partial"|"correct", "note": "<at most 15 words>"}.
+   - verdict (overall, for the whole card): "wrong" (missing or incorrect core idea), "partial" (core idea right, key facts missing), "correct" (all key facts).
    - ease: wrong=1, partial=2, correct=3, correct AND complete and crisp=4.
    - feedback: one or two blunt sentences — fix what is wrong, add the single most important missing piece. No praise.
    - missed: facts in the reference answer the user did not give, each at most 12 words, specific facts not vague topics. [] if nothing.
    If you notice the user repeating a gap from earlier in this session, say so in feedback.
-   Reply: {"verdict": "...", "ease": N, "feedback": "...", "missed": ["..."]}
+   Reply: {"per_question": [...], "verdict": "...", "ease": N, "feedback": "...", "missed": ["..."]}
 
 Reply with the JSON object only. No prose, no code fences."""
 
@@ -46,12 +49,22 @@ def ask_prompt(question: str, answer: str) -> str:
     return f"NEW CARD\n\nQuestion:\n{question}\n\nReference answer:\n{answer}"
 
 
-def grade_prompt(question: str, sharp_question: str, answer: str, user_answer: str) -> str:
-    asked = f"\n\nQuestion as asked:\n{sharp_question}" if sharp_question else ""
-    return (
-        f"GRADE\n\nCard question:\n{question}{asked}\n\n"
-        f"Reference answer:\n{answer}\n\nUser's answer:\n{user_answer}"
+def grade_prompt(question: str, asked: list, answer: str, user_answers: list) -> str:
+    """asked = questions shown (empty when no rewrite happened: cloze or ask failed)."""
+    asked = asked or [question]
+    pairs = "\n\n".join(
+        f"Q{i}: {q}\nUser's answer {i}: {a.strip() or '(blank)'}"
+        for i, (q, a) in enumerate(zip(asked, _pad(user_answers, len(asked))), 1)
     )
+    return f"GRADE\n\nCard question:\n{question}\n\nReference answer:\n{answer}\n\n{pairs}"
+
+
+def _pad(items: list, n: int) -> list:
+    """Fit the answers to n questions: pad with blanks, fold any extras into the last."""
+    items = list(items)
+    if len(items) > n:
+        items = items[:n - 1] + ["\n".join(items[n - 1:])]
+    return items + [""] * (n - len(items))
 
 
 def parse_json_reply(text: str) -> dict:
@@ -66,12 +79,20 @@ def parse_json_reply(text: str) -> dict:
     return obj
 
 
-def parse_question(text: str) -> dict:
+MAX_QUESTIONS = 4
+
+
+def parse_questions(text: str) -> dict:
     obj = parse_json_reply(text)
-    q = obj.get("question")
-    if not isinstance(q, str) or not q.strip():
-        raise ValueError("reply has no 'question'")
-    return {"question": q.strip()}
+    qs = obj.get("questions", obj.get("question"))
+    if isinstance(qs, str):
+        qs = [qs]
+    if not isinstance(qs, list):
+        raise ValueError("reply has no 'questions'")
+    qs = [str(q).strip() for q in qs if str(q).strip()][:MAX_QUESTIONS]
+    if not qs:
+        raise ValueError("reply has no 'questions'")
+    return {"questions": qs}
 
 
 def parse_grade(text: str) -> dict:
@@ -86,7 +107,13 @@ def parse_grade(text: str) -> dict:
     missed = obj.get("missed") or []
     if not isinstance(missed, list):
         missed = [missed]
+    per_question = []
+    for pq in obj.get("per_question") or []:
+        if isinstance(pq, dict):
+            v = str(pq.get("verdict", "")).lower()
+            per_question.append({"verdict": v if v in VERDICTS else "partial", "note": str(pq.get("note", "")).strip()})
     return {
+        "per_question": per_question,
         "verdict": verdict,
         "ease": ease,
         "feedback": str(obj.get("feedback", "")).strip(),
