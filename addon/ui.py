@@ -32,7 +32,7 @@ CSS = """
 .ai-pq { margin: 0.6em 0; } .ai-pq-q { font-weight: 600; white-space: pre-wrap; }
 .ai-you { opacity: 0.75; white-space: pre-wrap; margin: 0.2em 0; }
 .ai-you.ai-you-wrong { color: #d33; opacity: 1; } .ai-you.ai-you-partial { color: #d97706; opacity: 1; }
-.ai-model { color: #27864a; }
+.ai-model, .ai-mark-correct { color: #27864a; } .ai-mark-partial { color: #d97706; } .ai-mark-wrong { color: #d33; }
 #ai-edit { text-align: left; width: min(92vw, 70em); box-sizing: border-box; margin: 0 auto 0.6em; }
 #ai-edit input { width: 100%; box-sizing: border-box; padding: 0.45em 0.6em; font: inherit; font-size: 0.9em;
                  border-radius: 6px; border: 1px solid #8888; background: transparent; color: inherit; }
@@ -199,7 +199,7 @@ def verdict_html(verdict: dict, questions: list, answers: list, edit_status=None
         for i, (q, pq) in enumerate(zip(questions, per_q)):
             a = answers[i] if i < len(answers) else ""
             rows.append(
-                f'<div class="ai-pq"><span class="ai-pq-q">{marks[pq["verdict"]]} {grading.rich(q)}</span>'
+                f'<div class="ai-pq"><span class="ai-pq-q"><span class="ai-mark-{pq["verdict"]}">{marks[pq["verdict"]]}</span> {grading.rich(q)}</span>'
                 f'<div class="ai-you{_you_class(pq["verdict"])}">You: {html.escape(a.strip() or "(blank)")}</div>'
                 f'<div>{grading.rich(pq["note"])}</div></div>'
             )

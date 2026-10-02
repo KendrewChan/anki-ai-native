@@ -114,7 +114,7 @@ def test_verdict_html_per_question_rows():
     v = {"verdict": "partial", "ease": 2, "feedback": "f", "missed": ["m"],
          "per_question": [{"verdict": "correct", "note": "n1"}, {"verdict": "wrong", "note": "n2"}]}
     html = ui.verdict_html(v, ["Q one", "Q two"], ["a1", ""])
-    assert "✓ Q one" in html and "✗ Q two" in html and "(blank)" in html and "<li>m</li>" in html
+    assert '<span class="ai-mark-correct">✓</span> Q one' in html and '<span class="ai-mark-wrong">✗</span> Q two' in html and "(blank)" in html and "<li>m</li>" in html
 
 
 def test_verdict_html_colours_wrong_red_partial_orange():

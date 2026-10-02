@@ -8,6 +8,7 @@ What changed in each version, newest first. How the add-on works today is in [do
 - Bold and math now render in questions, hints, feedback, per-question notes and Missed bullets. Sharp questions and hints are typeset with Anki's MathJax.
 - A sharp question asking for several parts lists them on separate lines as 1), 2), ….
 - LaTeX written with single backslashes no longer breaks reply parsing.
+- The per-question ✓ / ~ / ✗ marks are coloured green / orange / red.
 
 ## v1.18 — Edit the note after grading (2026-10-02)
 
