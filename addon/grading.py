@@ -20,9 +20,10 @@ Two kinds of message arrive:
    Reply: {"questions": ["<question>" or {"question": "...", "parts": [...]}, ...], "hints": ["<hint>" or ["<hint per part>", ...], ...]}
 
 2. GRADE — you get the card again plus the user's free-text answer to each question asked. Judge ONLY against this card's reference answer; ignore earlier cards. Match each answer to its own question; a blank answer is wrong for that question.
-   - per_question: for each question in order, {"verdict": "wrong"|"partial"|"correct", "note": "<at most 15 words>", "parts": [{"text": "<words copied exactly from the user's answer>", "verdict": "wrong"|"partial"|"correct"}, ...]}.
-     parts: the user's answer split into its claims, in order, each quoted verbatim (never reworded, typos kept); skip filler words. [] for a blank answer.
-   - verdict (overall, for the whole card): "wrong" (missing or incorrect core idea), "partial" (core idea right, key facts missing), "correct" (all key facts).
+   - per_question: for each question in order, {"verdict": "wrong"|"partial"|"correct", "note": "<at most 15 words>", "parts": [{"text": "<one claim from the user's answer>", "verdict": "wrong"|"partial"|"correct", "why": "<partial/wrong: what is off and what is right, at most 15 words; \"\" when correct>"}, ...]}.
+     parts: the user's answer clipped into its separate claims, in order, in the user's own words (trim filler, never add facts). [] for a blank answer.
+     Be consistent: a question is "correct" only if none of its parts is partial or wrong, and its note must not call a partial or wrong part right.
+   - verdict (overall, for the whole card; must follow the per-question verdicts — "correct" only if every question is correct): "wrong" (missing or incorrect core idea), "partial" (core idea right, key facts missing), "correct" (all key facts).
    - ease: wrong=1, partial=2, correct=3, correct AND complete and crisp=4.
    - feedback: one or two blunt sentences — fix what is wrong, add the single most important missing piece. No praise.
    - missed: facts in the reference answer the user did not give, each at most 12 words, specific facts not vague topics. [] if nothing.
@@ -189,8 +190,8 @@ def parse_grade(text: str) -> dict:
         if isinstance(pq, dict):
             v = str(pq.get("verdict", "")).lower()
             parts = pq.get("parts") if isinstance(pq.get("parts"), list) else []
-            parts = [{"text": str(x.get("text", "")).strip(), "verdict": str(x.get("verdict", "")).lower()}
-                     for x in parts if isinstance(x, dict)]
+            parts = [{"text": str(x.get("text", "")).strip(), "verdict": str(x.get("verdict", "")).lower(),
+                      "why": str(x.get("why") or "").strip()} for x in parts if isinstance(x, dict)]
             per_question.append({"verdict": v if v in VERDICTS else "partial", "note": str(pq.get("note", "")).strip(),
                                  "parts": [x for x in parts if x["text"] and x["verdict"] in VERDICTS]})
     return {

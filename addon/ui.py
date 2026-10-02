@@ -2,7 +2,6 @@
 
 import html
 import json
-import re
 
 from . import grading
 
@@ -33,8 +32,9 @@ CSS = """
 .ai-wrong { background: #c0392b; } .ai-partial { background: #c27c0e; } .ai-correct { background: #27864a; }
 .ai-pq { margin: 0.6em 0; } .ai-pq-q { font-weight: 600; white-space: pre-wrap; }
 .ai-you { opacity: 0.75; white-space: pre-wrap; margin: 0.2em 0; }
-.ai-you.ai-you-wrong { color: #d33; opacity: 1; } .ai-you.ai-you-partial { color: #d97706; opacity: 1; }
-.ai-you.ai-you-marked { opacity: 1; }
+.ai-you.ai-you-marked { opacity: 1; } .ai-you.ai-you-wrong { color: #d33; opacity: 1; } .ai-you.ai-you-partial { color: #d97706; opacity: 1; }
+.ai-verdict .ai-claims { margin: 0.2em 0 0.3em 1.2em; padding: 0; white-space: normal; } .ai-claims li { margin: 0.15em 0; }
+.ai-why { opacity: 0.8; font-size: 0.92em; }
 .ai-mark-correct { color: #27864a; } .ai-mark-partial { color: #d97706; } .ai-mark-wrong { color: #d33; }
 #ai-edit { text-align: left; width: min(92vw, 70em); box-sizing: border-box; margin: 0 auto 0.6em; }
 #ai-edit input { width: 100%; box-sizing: border-box; padding: 0.45em 0.6em; font: inherit; font-size: 0.9em;
@@ -252,27 +252,15 @@ def _you_class(verdict: str) -> str:
 
 
 def _you_html(answer: str, verdict: str, parts) -> str:
-    """The user's answer: the AI's quoted parts coloured by verdict, else the whole answer red/orange by its grade."""
-    text = answer.strip() or "(blank)"
-    marked = _marked_answer(text, parts or [])
-    if marked:
-        return f'<div class="ai-you ai-you-marked">You: {marked}</div>'
-    return f'<div class="ai-you{_you_class(verdict)}">You: {html.escape(text)}</div>'
-
-def _marked_answer(text: str, parts: list) -> str:
-    """HTML of text with each part (found in order, whitespace and case tolerant) in its verdict colour; '' if none found."""
-    spans, cursor = [], 0
-    for p in parts:
-        pat = re.compile(r"\s+".join(map(re.escape, p["text"].split())), re.I)
-        m = pat.search(text, cursor) or pat.search(text)
-        if m and m.end() > m.start() and not any(m.start() < e and s < m.end() for s, e, _ in spans):
-            spans.append((m.start(), m.end(), p["verdict"]))
-            cursor = m.end()
-    out, pos = [], 0
-    for s, e, v in sorted(spans):
-        out.append(f'{html.escape(text[pos:s])}<span class="ai-mark-{v}">{html.escape(text[s:e])}</span>')
-        pos = e
-    return "".join(out) + html.escape(text[pos:]) if spans else ""
+    """The user's answer as the AI's clipped claims (coloured, with why for partial/wrong); without claims the whole
+    answer, red/orange by its grade."""
+    if parts:
+        items = "".join(
+            f'<li><span class="ai-mark-{p["verdict"]}">{html.escape(p["text"])}</span>'
+            + (f'<span class="ai-why"> — {grading.rich(p["why"])}</span>' if p["verdict"] != "correct" and p.get("why") else "")
+            + "</li>" for p in parts)
+        return f'<div class="ai-you ai-you-marked">You:<ul class="ai-claims">{items}</ul></div>'
+    return f'<div class="ai-you{_you_class(verdict)}">You: {html.escape(answer.strip() or "(blank)")}</div>'
 
 def append_verdict_note_js(note: str) -> str:
     snippet = json.dumps(f'<div class="ai-err">{html.escape(note)}</div>')

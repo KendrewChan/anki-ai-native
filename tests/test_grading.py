@@ -33,7 +33,7 @@ def test_parse_grade_per_question_normalised():
 def test_parse_grade_parts_cleaned():
     r = grading.parse_grade('{"verdict":"partial","per_question":[{"verdict":"partial","parts":'
                             '[{"text":" a b ","verdict":"Correct"},{"text":"","verdict":"wrong"},{"text":"c","verdict":"?"},"x"]}]}')
-    assert r["per_question"][0]["parts"] == [{"text": "a b", "verdict": "correct"}]
+    assert r["per_question"][0]["parts"] == [{"text": "a b", "verdict": "correct", "why": ""}]
     assert "parts" in grading.SYSTEM_PROMPT
 
 
@@ -156,16 +156,26 @@ def test_verdict_html_colours_wrong_red_partial_orange():
     assert 'class="ai-you ai-you-wrong"' in single
 
 
-def test_verdict_html_colours_quoted_parts_of_answer():
-    parts = [{"text": "uses a  heap", "verdict": "correct"}, {"text": "o(n)", "verdict": "wrong"},
-             {"text": "not in answer", "verdict": "partial"}]
+def test_verdict_html_lists_claims_with_why():
+    parts = [{"text": "2pc strong consistency", "verdict": "correct", "why": "ignored"},
+             {"text": "saga <weak>", "verdict": "partial", "why": "**eventual**, not weak"}]
     v = {"verdict": "partial", "ease": 2, "feedback": "f", "missed": [],
          "per_question": [{"verdict": "partial", "note": "", "parts": parts}]}
-    html = ui.verdict_html(v, ["Q"], ["It uses a heap, so O(n) <fast>"])
-    assert ('<div class="ai-you ai-you-marked">You: It <span class="ai-mark-correct">uses a heap</span>, so '
-            '<span class="ai-mark-wrong">O(n)</span> &lt;fast&gt;</div>') in html
-    single = ui.verdict_html(dict(v, per_question=[{"verdict": "wrong", "note": "", "parts": parts[2:]}]), [], ["x"])
-    assert '<div class="ai-you ai-you-partial">You: x</div>' in single  # nothing found: whole answer by grade
+    html = ui.verdict_html(v, ["Q"], ["whole answer text"])
+    assert ('<div class="ai-you ai-you-marked">You:<ul class="ai-claims">'
+            '<li><span class="ai-mark-correct">2pc strong consistency</span></li>'
+            '<li><span class="ai-mark-partial">saga &lt;weak&gt;</span>'
+            '<span class="ai-why"> — <b>eventual</b>, not weak</span></li></ul></div>') in html
+    assert "whole answer text" not in html and "ignored" not in html
+    plain = ui.verdict_html(dict(v, per_question=[{"verdict": "wrong", "note": "", "parts": []}]), [], ["x"])
+    assert '<div class="ai-you ai-you-partial">You: x</div>' in plain  # no claims: whole answer by grade
+
+
+def test_parse_grade_keeps_why_and_prompt_demands_consistency():
+    r = grading.parse_grade('{"verdict":"partial","per_question":[{"verdict":"partial","parts":'
+                            '[{"text":"a","verdict":"partial","why":" off "}]}]}')
+    assert r["per_question"][0]["parts"] == [{"text": "a", "verdict": "partial", "why": "off"}]
+    assert '"correct" only if none of its parts' in grading.SYSTEM_PROMPT
 
 
 def test_answer_side_keeps_model_answer_plain():

@@ -2,6 +2,11 @@
 
 What changed in each version, newest first. How the add-on works today is in [docs/spec.md](docs/spec.md).
 
+## v1.22 — Your answer as graded bullet points (2026-10-02)
+
+- The verdict lists your answer as short claims instead of repeating it. Each is green, orange or red, and orange or red ones say what's off and what's right.
+- Grades must agree: a question with a partial or wrong claim can't be marked ✓, and the overall grade follows the question grades.
+
 ## v1.21 — Numbered sub-questions (2026-10-02)
 
 - Sub-questions are numbered under their question (3.1, 3.2, …) instead of 1), 2), and each part has its own hint.
