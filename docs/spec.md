@@ -115,3 +115,9 @@ Each graded review **replaces** the card's Missed section (in the field chosen b
 - **Provider is a dropdown** (Claude Code / Codex) in Configurations — a plain control so a broken provider can always be switched without the chat.
 - **Per-provider models**: `models: {"claude": …, "codex": …}`; "use opus" sets the current provider's model; switching provider restores that provider's own model. Legacy single `model` key is read as the active provider's model and migrated on the next save. The Model row shows the current provider's model ("default" = the CLI's own default).
 - **Chat log**: only the latest 3 AI replies are shown; no per-change ✓ lines. A rejected change (✗ reason) is folded into that reply and shown in red. Dropdown changes are silent (Configurations shows the result).
+
+## v1.6 — actual model names (2026-10-02)
+
+- Settings shows the **real model id**, never "default" (e.g. Codex default → `gpt-5.6-sol`, Claude `sonnet` → `claude-sonnet-5-5`).
+- Source = the CLI's own report, no hand-written mapping: Claude's stream-json `init` event (`model`), Codex's plain `exec` stderr header (`model: …`). Both appear before the model is called.
+- Real Claude calls record the name from their `init` event. When no name is known, Settings runs a lookup that starts the CLI and stops it as soon as the name appears (Codex ~0.1 s, Claude ~1.5 s). Names are saved in config (`resolved_models`, `"provider:configured"` → id) so they show instantly after a restart.

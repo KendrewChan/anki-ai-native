@@ -16,7 +16,7 @@ def emit(obj):
     sys.stdout.flush()
 
 
-emit({"type": "system", "subtype": "init", "tools": []})
+emit({"type": "system", "subtype": "init", "tools": [], "model": "fake-claude-model"})
 turn = 0
 for line in sys.stdin:
     content = json.loads(line)["message"]["content"]

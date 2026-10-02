@@ -16,6 +16,8 @@ def emit(obj):
 
 
 prompt = sys.stdin.read()
+sys.stderr.write("OpenAI Codex v0\n--------\nmodel: fake-codex-model\nprovider: openai\n--------\n")
+sys.stderr.flush()
 emit({"type": "thread.started", "thread_id": "t"})
 emit({"type": "turn.started"})
 m = re.search(r"SLEEP:([\d.]+)", prompt)

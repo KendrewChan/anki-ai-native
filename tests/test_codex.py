@@ -178,3 +178,39 @@ def test_read_auth_status_codex_reads_stderr(tmp_path):
 def test_read_auth_status_claude_reads_stdout_json(tmp_path):
     path = _fake_cli(tmp_path, 'print(\'{"loggedIn": true, "authMethod": "claude.ai"}\')')
     assert session.read_auth_status("claude", path) == (True, "logged in (claude.ai)")
+
+
+FAKE_CLAUDE = os.path.join(os.path.dirname(__file__), "fake_claude.py")
+FAKE_CODEX = os.path.join(os.path.dirname(__file__), "fake_codex.py")
+
+
+def _exe(tmp_path, name, target):
+    p = tmp_path / name
+    p.write_text(f"#!/bin/sh\nexec {sys.executable} {target} \"$@\"\n")
+    p.chmod(0o755)
+    return str(p)
+
+
+def test_probe_model_reads_codex_header(tmp_path):
+    name = session.probe_model("codex", _exe(tmp_path, "codex", FAKE_CODEX), "", str(tmp_path))
+    assert name == "fake-codex-model" and session.resolved_model("codex", "") == "fake-codex-model"
+
+
+def test_probe_model_reads_claude_init(tmp_path):
+    name = session.probe_model("claude", _exe(tmp_path, "claude", FAKE_CLAUDE), "sonnet", str(tmp_path))
+    assert name == "fake-claude-model" and session.resolved_model("claude", "sonnet") == "fake-claude-model"
+
+
+def test_probe_model_fails_cleanly(tmp_path):
+    with pytest.raises(SessionError):
+        session.probe_model("codex", _exe(tmp_path, "x", "-c 'import sys; sys.stdin.read()'"), "", str(tmp_path), timeout=5)
+
+
+def test_real_claude_calls_record_the_model(tmp_path):
+    s = session.ClaudeSession([sys.executable, FAKE_CLAUDE], str(tmp_path), lambda f: f(), "opus")
+    try:
+        done = threading.Event()
+        s.request(1, "hi", parse_json_reply, 5, lambda *a: done.set())
+        assert done.wait(10) and session.resolved_model("claude", "opus") == "fake-claude-model"
+    finally:
+        s.close()

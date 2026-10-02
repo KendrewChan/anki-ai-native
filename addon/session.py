@@ -8,6 +8,7 @@ Both are stateless per request: every prompt carries everything the model needs.
 import json
 import os
 import queue
+import re
 import shutil
 import subprocess
 import threading
@@ -123,7 +124,7 @@ def make_backend(cfg: dict, system_prompt: str, cwd: str, dispatch):
         cmd = build_codex_command(find_cli("codex", cfg.get("codex_path", "")), model, cwd)
         return CodexBackend(cmd, cwd, dispatch, system_prompt)
     cmd = build_command(find_cli("claude", cfg.get("claude_path", "")), model, system_prompt)
-    return ClaudeSession(cmd, cwd, dispatch)
+    return ClaudeSession(cmd, cwd, dispatch, model)
 
 
 class SessionError(Exception):
@@ -221,7 +222,8 @@ class _Backend:
 class ClaudeSession(_Backend):
     """One long-running claude process; the conversation persists only to save startup time."""
 
-    def __init__(self, cmd: list, cwd: str, dispatch):
+    def __init__(self, cmd: list, cwd: str, dispatch, model: str = ""):
+        self._model = model
         self._lines = None
         self._discard = 0  # results still owed to requests that timed out
         super().__init__(cmd, cwd, dispatch)
@@ -251,6 +253,8 @@ class ClaudeSession(_Backend):
                 obj = json.loads(line)
             except ValueError:
                 continue
+            if obj.get("type") == "system" and obj.get("subtype") == "init" and obj.get("model"):
+                remember_model("claude", self._model, obj["model"])
             if obj.get("type") != "result":
                 continue
             if self._discard:
@@ -395,3 +399,67 @@ def read_auth_status(provider: str, path: str, timeout: float = 20) -> tuple:
 def auth_command(provider: str, path: str, action: str) -> list:
     """action: login | logout."""
     return [path, action] if provider == "codex" else [path, "auth", action]
+
+
+# --- actual model names ("sonnet" / provider default -> the real model id) ---
+
+_resolved = {}  # (provider, configured model) -> actual model id; filled by probes and by real calls
+CODEX_MODEL_LINE = re.compile(r"^model:\s*(\S+)", re.M)
+
+
+def remember_model(provider: str, configured: str, actual: str):
+    _resolved[(provider, configured or "")] = actual
+
+
+def resolved_model(provider: str, configured: str):
+    return _resolved.get((provider, configured or ""))
+
+
+def probe_model(provider: str, path: str, configured: str, cwd: str, timeout: float = 30) -> str:
+    """Start the CLI just far enough to learn which model it will use, then stop it.
+
+    Both CLIs announce the model before calling it: Claude in its stream-json init event,
+    Codex in the stderr header of a plain (non --json) `codex exec`.
+    """
+    if provider == "codex":
+        cmd = [path, "exec", *CODEX_ISOLATION_FLAGS, *(["-m", configured] if configured else []), "-C", cwd, "-"]
+        stream, prompt = "stderr", "Reply with: ok"
+    else:
+        cmd = build_command(path, configured, "Reply with: ok")
+        stream = "stdout"
+        prompt = json.dumps({"type": "user", "message": {"role": "user", "content": "ok"}}) + "\n"
+    proc = subprocess.Popen(cmd, cwd=cwd, text=True, stdin=subprocess.PIPE,
+                            stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    found = []
+
+    def read():
+        for line in getattr(proc, stream):
+            if provider == "codex":
+                m = CODEX_MODEL_LINE.match(line)
+                if m:
+                    found.append(m.group(1))
+                    return
+            else:
+                try:
+                    obj = json.loads(line)
+                except ValueError:
+                    continue
+                if obj.get("type") == "system" and obj.get("subtype") == "init" and obj.get("model"):
+                    found.append(obj["model"])
+                    return
+
+    reader = threading.Thread(target=read, daemon=True)
+    reader.start()
+    try:
+        proc.stdin.write(prompt)
+        proc.stdin.flush()
+        if provider == "codex":
+            proc.stdin.close()
+    except (BrokenPipeError, OSError):
+        pass
+    reader.join(timeout)
+    _terminate(proc)
+    if not found:
+        raise SessionError("error", f"could not read the model name from {provider}")
+    remember_model(provider, configured, found[0])
+    return found[0]

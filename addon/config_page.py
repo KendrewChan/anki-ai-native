@@ -11,7 +11,8 @@ from aqt import mw
 from . import config_ops
 from collections import deque
 
-from .session import PROVIDER_LABELS, auth_command, find_cli, make_backend, model_for, read_auth_status
+from .session import (PROVIDER_LABELS, auth_command, find_cli, make_backend, model_for, probe_model,
+                      read_auth_status, resolved_model)
 
 STATE = "aiStudyConfig"
 
@@ -85,6 +86,7 @@ class ConfigPage:
         self.logged_in = None
         self.busy = False
         self.selected = None  # full deck name chosen in the Deck Prompts tree
+        self._probing = set()  # (provider, model) lookups in flight
         setattr(mw, f"_{STATE}State", self._enter)
         setattr(mw, f"_{STATE}Cleanup", self._leave)
 
@@ -189,6 +191,43 @@ class ConfigPage:
 
         threading.Thread(target=work, daemon=True).start()
 
+    def _model_name(self, provider: str, path: str, configured: str) -> str:
+        """The real model id; looks it up in the background the first time."""
+        saved = self._cfg().get("resolved_models") or {}
+        actual = resolved_model(provider, configured) or saved.get(f"{provider}:{configured}")
+        if actual:
+            if saved.get(f"{provider}:{configured}") != actual:
+                self._save_resolved(provider, configured, actual)  # a real call reported a newer name
+            return actual
+        key = (provider, configured)
+        if key not in self._probing:
+            self._probing.add(key)
+            cwd = self.cwd = self.cwd or tempfile.mkdtemp(prefix="anki_ai_cfg_")
+
+            def work():
+                try:
+                    actual = probe_model(provider, path, configured, cwd)
+                except Exception:  # stays "checking…"; the next real call fills it in
+                    actual = None
+
+                def done():
+                    self._probing.discard(key)
+                    if actual:
+                        self._save_resolved(provider, configured, actual)
+                    self._update(None)
+
+                mw.taskman.run_on_main(done)
+
+            threading.Thread(target=work, daemon=True).start()
+            return "checking…"
+        return configured or "checking…"
+
+    def _save_resolved(self, provider: str, configured: str, actual: str):
+        """Persist the model name so it shows immediately after a restart (not a user setting: no undo)."""
+        cfg = self._cfg()
+        names = dict(cfg.get("resolved_models") or {}, **{f"{provider}:{configured}": actual})
+        mw.addonManager.writeConfig(self.addon, dict(cfg, resolved_models=names))
+
     def _set_auth(self, ok, text):
         self.logged_in, self.auth = ok, text
         if mw.state == STATE:
@@ -259,7 +298,7 @@ class ConfigPage:
             for label, key in (("Ask timeout (s)", "ask_timeout_s"),
                                ("Grade timeout (s)", "grade_timeout_s"), ("Missed append", "missed_append"))
         ]
-        rows.insert(2, ("Model", html.escape(model_for(cfg) or "default")))
+        rows.insert(2, ("Model", html.escape(self._model_name(provider, found, model_for(cfg)))))
         path = cfg.get(f"{provider}_path") or ""
         rows.append((f"{PROVIDER_LABELS[provider]} path",
                      html.escape(path if path and path != "auto" else f"auto → {found}")))
