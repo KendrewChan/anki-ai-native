@@ -96,4 +96,4 @@ def test_prompt_and_reply():
     r = g.parse_generate_reply('```json\n{"reply": "ok", "read_decks": ["Biology"], "changes": [{"remove": 1}, 3]}\n```')
     assert r == {"reply": "ok", "read_decks": ["Biology"], "changes": [{"remove": 1}]}
     with pytest.raises(ValueError):
-        g.parse_generate_reply('{"changes": {}}')
+        g.parse_generate_reply('{"changes": {"remove": 1}}')
