@@ -176,8 +176,11 @@ def question_html(original: str, mode: str) -> str:
 
 ASK_CSS = """
 <style>
-#ai-ask-bubble { display: none; position: absolute; z-index: 20; padding: 0.2em 0.6em; border-radius: 6px; cursor: pointer;
-                 font-size: 0.8em; background: #2b2b2b; color: #eee; box-shadow: 0 2px 8px #0005; user-select: none; }
+#ai-ask-bubble { display: none; position: absolute; z-index: 20; padding: 0.15em 0.5em; cursor: pointer; user-select: none;
+                 font-size: 0.75em; font-weight: 700; line-height: 1.4; color: #fff; background: #2563eb;
+                 border-radius: 0.8em 0.8em 0.8em 0.15em; box-shadow: 0 2px 6px #0004; }
+#ai-ask-bubble::after { content: ""; position: absolute; left: 0; bottom: -0.45em;  /* speech-bubble tail toward the text */
+                        border-style: solid; border-width: 0.5em 0.5em 0 0; border-color: #2563eb transparent transparent transparent; }
 #ai-ask-pop { display: none; position: absolute; z-index: 20; width: min(26em, calc(100vw - 16px)); box-sizing: border-box;
               padding: 0.5em 0.6em; border-radius: 8px; text-align: left; font-size: 0.9em; line-height: 1.4;
               background: var(--canvas, Canvas); color: inherit; border: 1px solid #8886; box-shadow: 0 4px 16px #0004; }
@@ -201,7 +204,7 @@ ASK_JS = """
   const $ = id => document.getElementById(id);
   const bubble = $("ai-ask-bubble"), pop = $("ai-ask-pop"), quote = $("ai-ask-quote");
   const input = $("ai-ask-input"), out = $("ai-ask-out"), toastEl = $("ai-ask-toast");
-  let sel = "", rect = null, timer = null;
+  let sel = "", rect = null, timer = null, fromField = false;
   const mine = el => el && (bubble.contains(el) || pop.contains(el) || toastEl.contains(el));
   const typeset = el => { if (window.MathJax && MathJax.typesetPromise) MathJax.typesetPromise([el]).catch(() => {}); };
 
@@ -211,6 +214,14 @@ ASK_JS = """
     const left = Math.max(8, Math.min(rect.left, window.innerWidth - el.offsetWidth - 8));
     el.style.left = (left - base.left) + "px";
     el.style.top = (rect.bottom + 6 - base.top) + "px";
+  }
+  function placeBubble() {  // at the highlight's top-right corner, tail pointing down at it
+    bubble.style.display = "block";
+    const base = bubble.offsetParent ? bubble.offsetParent.getBoundingClientRect() : {top: 0, left: 0};
+    const left = Math.max(8, Math.min(rect.right + 2, window.innerWidth - bubble.offsetWidth - 8));
+    const top = Math.max(4, rect.top - bubble.offsetHeight - 6);
+    bubble.style.left = (left - base.left) + "px";
+    bubble.style.top = (top - base.top) + "px";
   }
   function close() { pop.style.display = "none"; bubble.style.display = "none"; }
   function toast(html, err) {
@@ -239,15 +250,19 @@ ASK_JS = """
 
   window.aiAsk = {
     up(e) {
-      if (mine(e.target) || (e.target.closest && e.target.closest("textarea, input, select"))) return;
+      // Judge by where the drag started: a drag over the question often ends on the answer box below it.
+      if (mine(e.target) || fromField) return;
       setTimeout(function () {
         const s = window.getSelection(), text = s.rangeCount ? s.toString().trim() : "";
         if (!text) { bubble.style.display = "none"; return; }
         sel = text; rect = s.getRangeAt(0).getBoundingClientRect();
-        pop.style.display = "none"; place(bubble);
+        pop.style.display = "none"; placeBubble();
       }, 0);
     },
-    down(e) { if (!mine(e.target)) close(); },
+    down(e) {  // selecting inside an answer box is editing, not asking
+      fromField = !!(e.target.closest && e.target.closest("textarea, input, select"));
+      if (!mine(e.target)) close();
+    },
     reply(html, err) {  // in the open box, else as a toast (e.g. after an edit redrew the card)
       if (pop.style.display !== "block") { toast(html, err); return; }
       out.innerHTML = html; out.className = err ? "ai-err" : ""; typeset(out);
@@ -272,10 +287,10 @@ ASK_PLACEHOLDER = {
 
 
 def ask_html(side: str, toast=None) -> str:
-    """Highlight-to-ask: selecting card text shows an "Ask AI" bubble that opens a box at the highlight.
+    """Highlight-to-ask: selecting card text shows an "AI" bubble that opens a box at the highlight.
     side = "question" | "answer"; toast = (text, is_error) to show on load (the reply to an edit that redrew the card)."""
     first = [grading.rich(toast[0]), toast[1]] if toast else None
-    return (f'{ASK_CSS}<div id="ai-ask-bubble">Ask AI</div>'
+    return (f'{ASK_CSS}<div id="ai-ask-bubble" title="Ask AI about this">AI</div>'
             f'<div id="ai-ask-pop"><div id="ai-ask-quote"></div>'
             f'<input id="ai-ask-input" placeholder="{html.escape(ASK_PLACEHOLDER[side])}"><div id="ai-ask-out"></div></div>'
             f'<div id="ai-ask-toast"></div>' + ASK_JS.replace("__TOAST__", json.dumps(first)))
