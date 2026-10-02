@@ -45,7 +45,7 @@ Open **⚙ Settings**: it checks your AI CLI on open. If something's wrong you g
 ## Notes
 
 - Studying uses your own plan's usage (Claude or ChatGPT). Claude keeps one `claude` process open per review session; Codex starts one per message.
-- Windows and Linux are untested. If the CLI isn't found, tell Settings its path ("claude path is /path/to/claude", or the same for codex).
+- Built and used on macOS. Windows and Linux are covered by automated tests but not yet tried in Anki itself. If the CLI isn't found, tell Settings its path ("claude path is /path/to/claude", or the same for codex).
 
 ## Development
 

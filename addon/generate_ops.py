@@ -45,6 +45,17 @@ GENERATE_SYSTEM_PROMPT += "\n\n" + STYLE_GUIDE
 # --- reference files ---
 
 def desktop() -> Path:
+    """The user's Desktop. Windows may move it (OneDrive's backup puts it in ~/OneDrive/Desktop), so ask the shell."""
+    if os.name == "nt":
+        try:
+            import winreg
+            key = r"Software\Microsoft\Windows\CurrentVersion\Explorer\User Shell Folders"
+            with winreg.OpenKey(winreg.HKEY_CURRENT_USER, key) as k:
+                path = Path(os.path.expandvars(winreg.QueryValueEx(k, "Desktop")[0]))
+            if path.is_dir():
+                return path
+        except OSError:
+            pass
     return Path.home() / "Desktop"
 
 

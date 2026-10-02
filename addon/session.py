@@ -5,6 +5,7 @@
 Both are stateless per request: every prompt carries everything the model needs.
 """
 
+import hashlib
 import json
 import os
 import queue
@@ -17,6 +18,11 @@ from collections import deque
 from . import state
 
 RETRY_PROMPT = "Your last reply was not valid JSON. Reply again with the JSON object only."
+
+# Every CLI call: UTF-8 pipes (on Windows the default codepage can't carry "→", "—" or non-English text), and on
+# Windows no console window flashing up per call (Anki is a windowed app).
+PROC_KW = {"encoding": "utf-8", "errors": "replace",
+           **({"creationflags": subprocess.CREATE_NO_WINDOW} if os.name == "nt" else {})}
 
 # Isolation: no user/project settings, hooks, plugins, CLAUDE.md, MCP servers or tools.
 # (--bare would be stricter but cannot use subscription/OAuth login.)
@@ -95,7 +101,19 @@ def find_cli(name: str, configured: str = "") -> str:
     return name
 
 
-def build_command(claude_path: str, model: str, system_prompt: str) -> list:
+def system_prompt_file(cwd: str, text: str) -> str:
+    """The system prompt as a file for --system-prompt-file. As an argument, a long multi-line prompt is cut at the
+    first newline by Windows' cmd.exe (npm installs claude as claude.cmd) and can pass the command-line length limit."""
+    path = os.path.abspath(os.path.join(cwd, f"system-{hashlib.sha1(text.encode('utf-8')).hexdigest()[:12]}.md"))
+    if not os.path.exists(path):
+        tmp = f"{path}.{threading.get_ident()}.tmp"  # several probes may write the same prompt at once
+        with open(tmp, "w", encoding="utf-8") as f:
+            f.write(text)
+        os.replace(tmp, path)
+    return path
+
+
+def build_command(claude_path: str, model: str, prompt_file: str) -> list:
     return [
         claude_path, "-p",
         "--input-format", "stream-json",
@@ -103,7 +121,7 @@ def build_command(claude_path: str, model: str, system_prompt: str) -> list:
         "--verbose",
         *ISOLATION_FLAGS,
         *(["--model", model] if model else []),
-        "--system-prompt", system_prompt,
+        "--system-prompt-file", prompt_file,
     ]
 
 
@@ -125,7 +143,7 @@ def make_backend(cfg: dict, system_prompt: str, cwd: str, dispatch):
     if provider == "codex":
         cmd = build_codex_command(find_cli("codex", cfg.get("codex_path", "")), model, cwd)
         return CodexBackend(cmd, cwd, dispatch, system_prompt)
-    cmd = build_command(find_cli("claude", cfg.get("claude_path", "")), model, system_prompt)
+    cmd = build_command(find_cli("claude", cfg.get("claude_path", "")), model, system_prompt_file(cwd, system_prompt))
     return ClaudeSession(cmd, cwd, dispatch, model)
 
 
@@ -275,7 +293,7 @@ class ClaudeSession(_Backend):
         try:
             proc = subprocess.Popen(
                 self._cmd, cwd=self._cwd, text=True, bufsize=1,
-                stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE, **PROC_KW,
             )
         except OSError as e:
             raise SessionError("unavailable", f"cannot start claude ({self._cmd[0]}): {e}")
@@ -312,7 +330,7 @@ class CodexBackend(_Backend):
         try:
             proc = subprocess.Popen(
                 self._cmd, cwd=self._cwd, text=True,
-                stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE, **PROC_KW,
             )
         except OSError as e:
             raise SessionError("unavailable", f"cannot start codex ({self._cmd[0]}): {e}")
@@ -391,7 +409,7 @@ def parse_auth_status(provider: str, returncode: int, out: str) -> tuple:
 def read_auth_status(provider: str, path: str, timeout: float = 20) -> tuple:
     """Run the provider's status command -> (logged_in, text). Codex prints its status on stderr."""
     r = subprocess.run(auth_status_command(provider, path), capture_output=True, text=True,
-                       timeout=timeout, stdin=subprocess.DEVNULL)
+                       timeout=timeout, stdin=subprocess.DEVNULL, **PROC_KW)
     out = r.stdout if r.stdout.strip() else r.stderr
     return parse_auth_status(provider, r.returncode, out)
 
@@ -426,7 +444,8 @@ def probe_model(provider: str, path: str, configured: str, cwd: str, timeout: fl
         name = _watch("codex", cmd, cwd, "Reply with: ok", "stderr", timeout, _codex_model)
     else:
         prompt = json.dumps({"type": "user", "message": {"role": "user", "content": "ok"}}) + "\n"
-        name = _watch("claude", build_command(path, configured, "Reply with: ok"), cwd, prompt, "stdout", timeout,
+        name = _watch("claude", build_command(path, configured, system_prompt_file(cwd, "Reply with: ok")), cwd, prompt,
+                      "stdout", timeout,
                       _claude_model, close_stdin=False)
     remember_model(provider, configured, name)
     return name
@@ -469,7 +488,7 @@ def _watch(name: str, cmd: list, cwd: str, stdin_text: str, stream: str, timeout
     Claude's stream-json input keeps stdin open (close_stdin=False); codex reads the whole prompt first.
     """
     proc = subprocess.Popen(cmd, cwd=cwd, text=True, stdin=subprocess.PIPE,
-                            stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+                            stdout=subprocess.PIPE, stderr=subprocess.PIPE, **PROC_KW)
     found, seen = [], deque(maxlen=5)
 
     def read():
@@ -507,7 +526,7 @@ def list_models(provider: str, path: str, cwd: str, timeout: float = 30) -> list
     """[(value, label)] the CLI offers right now. Codex: its catalog; Claude: what each alias resolves to."""
     if provider == "codex":
         r = subprocess.run([path, "debug", "models"], capture_output=True, text=True,
-                           timeout=timeout, stdin=subprocess.DEVNULL)
+                           timeout=timeout, stdin=subprocess.DEVNULL, **PROC_KW)
         models = json.loads(r.stdout).get("models") or []
         listed = sorted((m for m in models if m.get("visibility") == "list"), key=lambda m: m.get("priority", 0))
         return [(m["slug"], m["slug"]) for m in listed]

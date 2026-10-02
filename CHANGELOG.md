@@ -2,6 +2,13 @@
 
 What changed in each version, newest first. How the add-on works today is in [docs/spec.md](docs/spec.md).
 
+## v1.31 — Windows fixes (2026-10-02)
+
+- Windows: AI calls use UTF-8, so arrows, dashes, accents and non-English text no longer garble or crash, and no console window pops up per call.
+- The tutor's instructions are now handed to Claude as a file, not on the command line. Windows' `claude.cmd` would otherwise cut them off at the first line break.
+- Generate finds your real Desktop on Windows, including when OneDrive has moved it.
+- The tests now run on Windows, macOS and Linux on every push (GitHub Actions).
+
 ## v1.30 — Highlight to ask (2026-10-02)
 
 - Highlight any text on a card and click the blue **AI** bubble at its top-right to ask about it, on the front as well as the back. On the front the AI helps you understand the question without giving away the answer. On the back it answers questions or changes the note. This replaces the Ask AI box above the grading.

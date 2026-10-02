@@ -33,6 +33,7 @@ Everything that doesn't import `aqt` is unit-tested with plain pytest.
 ## Providers and sessions (`session.py`)
 
 - `provider`: `claude` (default) or `codex`. Uses the user's logged-in CLI; no API keys. CLI paths `claude_path` / `codex_path` are auto-detected when empty, including when Anki is launched from the Dock (no shell `PATH`).
+- **Windows**: every CLI call uses UTF-8 pipes and, on Windows, no console window (`session.PROC_KW`). The Claude system prompt is passed as a file (`--system-prompt-file`, written into the session's temp folder by `session.system_prompt_file`), never as an argument: npm installs `claude.cmd`, and `cmd.exe` cuts arguments at the first newline. The test suite runs on Windows, macOS and Linux in GitHub Actions (`.github/workflows/tests.yml`), using `.cmd` wrappers for the fake CLIs on Windows. Rollback needs the Mac/Linux install layout; elsewhere it offers no versions.
 - **Stateless requests**: every prompt carries the card, questions, answers, deck prompts and the card's last Missed section. No conversation memory is relied on.
 - **Claude**: one long-running `claude -p --input-format stream-json --output-format stream-json --verbose` per review session, kept only to skip startup. Starts on first request; stops when review ends, on profile close and on app exit.
 - **Codex**: one `codex exec --json … -` per message, system prompt prepended on stdin; answer = last `agent_message` event.
@@ -109,7 +110,7 @@ A main-window state (`aiStudyGenerate`). It works whether AI Study is on or off,
 
 - **References**:
   - Chosen with **Choose folder…** / **Choose file…** (native pickers opening on the Desktop) or cleared with **×**. The path box is read-only.
-  - Must resolve to something strictly inside `~/Desktop`.
+  - Must resolve to something strictly inside the Desktop: `~/Desktop`, or on Windows the folder the shell reports (OneDrive often moves it to `~/OneDrive/Desktop`; `generate_ops.desktop`).
   - Text files only. Binary and non-UTF-8 files are listed as skipped. Hidden files, `.git`, `node_modules`, `__pycache__` and venvs are ignored.
   - Limits: ≤ 300 files and ≤ 150k characters per message; anything cut off is reported.
   - Re-read on every message.

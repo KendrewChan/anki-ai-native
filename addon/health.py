@@ -4,7 +4,7 @@ import os
 import re
 import subprocess
 
-from .session import SessionError, error_kind, startup_check
+from .session import PROC_KW, SessionError, error_kind, startup_check
 
 VERSION = re.compile(r"\d+\.\d+\.\d+")
 INCOMPATIBLE = re.compile(
@@ -18,7 +18,7 @@ LAST_ERROR = {}
 
 
 def _run(cmd: list, timeout: float) -> subprocess.CompletedProcess:
-    return subprocess.run(cmd, capture_output=True, text=True, timeout=timeout, stdin=subprocess.DEVNULL)
+    return subprocess.run(cmd, capture_output=True, text=True, timeout=timeout, stdin=subprocess.DEVNULL, **PROC_KW)
 
 
 def cli_version(path: str, timeout: float = 20) -> str:

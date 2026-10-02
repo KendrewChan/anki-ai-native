@@ -6,15 +6,15 @@ import pytest
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 from addon import health, session, state  # noqa: E402
+from fakes import FAKE_CODEX, make_exe  # noqa: E402
 
-HERE = os.path.dirname(__file__)
+
+
+UNIX_LAYOUT = pytest.mark.skipif(os.name == "nt", reason="symlinked Mac/Linux install layout")
 
 
 def _exe(tmp_path, name, body):
-    p = tmp_path / name
-    p.write_text(f"#!{sys.executable}\nimport sys\n{body}\n")
-    p.chmod(0o755)
-    return str(p)
+    return make_exe(tmp_path, name, body=body)
 
 
 def test_cli_version_parses_both_formats(tmp_path):
@@ -36,10 +36,8 @@ def test_classify(msg, kind):
 
 
 def test_self_check_passes_with_fake_codex(tmp_path):
-    fake = tmp_path / "codex"
-    fake.write_text(f"#!/bin/sh\nexec {sys.executable} {os.path.join(HERE, 'fake_codex.py')} \"$@\"\n")
-    fake.chmod(0o755)
-    assert health.self_check("codex", str(fake), str(tmp_path)) == (True, "fake-codex-model")
+    fake = make_exe(tmp_path, "codex", FAKE_CODEX)
+    assert health.self_check("codex", fake, str(tmp_path)) == (True, "fake-codex-model")
 
 
 def test_self_check_reports_incompatible_flag(tmp_path):
@@ -66,6 +64,7 @@ def _codex_layout(tmp_path, versions, current):
     return str(link)
 
 
+@UNIX_LAYOUT
 def test_codex_rollback_repoints_current(tmp_path):
     path = _codex_layout(tmp_path, ["0.147.0", "0.152.0"], "0.152.0")
     assert set(health.installed_versions("codex", path)) == {"0.147.0", "0.152.0"}
@@ -74,6 +73,7 @@ def test_codex_rollback_repoints_current(tmp_path):
     assert health.rollback("codex", path, "0.1.0")[0] is False
 
 
+@UNIX_LAYOUT
 def test_claude_versions_listed_from_versions_dir(tmp_path):
     vdir = tmp_path / "versions"
     vdir.mkdir()

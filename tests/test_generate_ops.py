@@ -19,7 +19,10 @@ def desk(tmp_path):
     (d / "notes" / "pic.png").write_bytes(b"\x89PNG\0\0binary")
     (d / "notes" / ".hidden").write_text("secret")
     (tmp_path / "outside.txt").write_text("nope")
-    (d / "link").symlink_to(tmp_path / "outside.txt")
+    try:
+        (d / "link").symlink_to(tmp_path / "outside.txt")
+    except OSError:  # Windows without symlink rights: "link" then simply doesn't exist (still rejected)
+        pass
     return d
 
 

@@ -10,9 +10,13 @@ import re
 import sys
 import time
 
+sys.stdin.reconfigure(encoding="utf-8")  # like the real CLIs: raw UTF-8 both ways, on every OS
+sys.stdout.reconfigure(encoding="utf-8")
+sys.stderr.reconfigure(encoding="utf-8")
+
 
 def emit(obj):
-    print(json.dumps(obj), flush=True)
+    print(json.dumps(obj, ensure_ascii=False), flush=True)
 
 
 if sys.argv[1:3] == ["debug", "models"]:

@@ -33,6 +33,12 @@ def call(s, prompt, card_id=1, timeout=5):
     return out
 
 
+def test_non_ascii_round_trips(sess):
+    """Real claude speaks raw UTF-8; on Windows the default codepage would garble or crash on it."""
+    out = call(sess, "Explain → — café, 中文 ✓")
+    assert out["err"] is None and out["result"]["echo"] == "Explain → — café, 中文 ✓"
+
+
 def test_reply_parsed_and_context_kept_across_requests(sess):
     a = call(sess, "first", card_id=7)
     b = call(sess, "second")

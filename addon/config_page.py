@@ -11,7 +11,7 @@ from aqt import mw
 from . import chat_page, config_ops
 from .chat_page import ChatPage, deck_ids
 from .fixes import Fixer
-from .session import (PROVIDER_LABELS, auth_command, find_cli, list_models, make_backend, model_for,
+from .session import (PROC_KW, PROVIDER_LABELS, auth_command, find_cli, list_models, make_backend, model_for,
                       probe_model, provider_of, read_auth_status, resolved_model)
 
 CSS = chat_page.CSS + """
@@ -314,7 +314,7 @@ class ConfigPage(ChatPage):
         def work():
             try:
                 r = subprocess.run(auth_command(provider, path, action), capture_output=True, text=True,
-                                   timeout=300, stdin=subprocess.DEVNULL)
+                                   timeout=300, stdin=subprocess.DEVNULL, **PROC_KW)
                 msg = None if r.returncode == 0 else (r.stderr or r.stdout).strip()[-300:]
             except Exception as e:
                 msg = str(e)

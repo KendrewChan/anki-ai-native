@@ -9,6 +9,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 from addon import config_ops, session  # noqa: E402
 from addon.grading import parse_json_reply  # noqa: E402
 from addon.session import CodexBackend, SessionError, parse_codex_output  # noqa: E402
+from fakes import FAKE_CLAUDE, FAKE_CODEX, make_exe  # noqa: E402
 
 FAKE = [sys.executable, os.path.join(os.path.dirname(__file__), "fake_codex.py")]
 
@@ -92,6 +93,24 @@ def test_claude_command_omits_model_when_default():
     assert session.build_command("/x/claude", "opus", "S")[-4:-2] == ["--model", "opus"]
 
 
+def test_claude_system_prompt_goes_in_a_file(tmp_path):
+    """Not an argument: Windows' cmd.exe (npm's claude.cmd) cuts arguments at the first newline."""
+    c = session.make_backend({"claude_path": "/x/claude"}, "line one\nline two → ✓", str(tmp_path), lambda f: f())
+    try:
+        assert "--system-prompt" not in c._cmd
+        path = c._cmd[c._cmd.index("--system-prompt-file") + 1]
+        with open(path, encoding="utf-8") as f:
+            assert f.read() == "line one\nline two → ✓"
+        assert session.system_prompt_file(str(tmp_path), "line one\nline two → ✓") == path  # same prompt, same file
+    finally:
+        c.close()
+
+
+def test_codex_round_trips_non_ascii(codex):
+    out = call(codex, "Explain → in \\(O(n \\log n)\\) — café, 中文 ✓")
+    assert out["err"] is None and out["result"]["echo"] == "Explain → in \\(O(n \\log n)\\) — café, 中文 ✓"
+
+
 def test_make_backend_picks_provider(tmp_path):
     b = session.make_backend({"provider": "codex", "codex_path": "/x/codex", "models": {"codex": "gpt-x"}},
                              "S", str(tmp_path), lambda f: f())
@@ -165,10 +184,7 @@ def test_model_default_keyword():
 
 
 def _fake_cli(tmp_path, body):
-    p = tmp_path / "cli"
-    p.write_text(f"#!{sys.executable}\nimport sys\n{body}\n")
-    p.chmod(0o755)
-    return str(p)
+    return make_exe(tmp_path, "cli", body=body)
 
 
 def test_read_auth_status_codex_reads_stderr(tmp_path):
@@ -182,15 +198,8 @@ def test_read_auth_status_claude_reads_stdout_json(tmp_path):
     assert session.read_auth_status("claude", path) == (True, "logged in (claude.ai)")
 
 
-FAKE_CLAUDE = os.path.join(os.path.dirname(__file__), "fake_claude.py")
-FAKE_CODEX = os.path.join(os.path.dirname(__file__), "fake_codex.py")
-
-
 def _exe(tmp_path, name, target):
-    p = tmp_path / name
-    p.write_text(f"#!/bin/sh\nexec {sys.executable} {target} \"$@\"\n")
-    p.chmod(0o755)
-    return str(p)
+    return make_exe(tmp_path, name, target)
 
 
 def test_probe_model_reads_codex_header(tmp_path):
@@ -205,7 +214,7 @@ def test_probe_model_reads_claude_init(tmp_path):
 
 def test_probe_model_fails_cleanly(tmp_path):
     with pytest.raises(SessionError):
-        session.probe_model("codex", _exe(tmp_path, "x", "-c 'import sys; sys.stdin.read()'"), "", str(tmp_path), timeout=5)
+        session.probe_model("codex", make_exe(tmp_path, "x", body="sys.stdin.read()"), "", str(tmp_path), timeout=5)
 
 
 def test_real_claude_calls_record_the_model(tmp_path):

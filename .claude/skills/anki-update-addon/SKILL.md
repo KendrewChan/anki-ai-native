@@ -23,7 +23,8 @@ This repo is the add-on. For development, `addon/` is **symlinked** into Anki as
 | `addon/generate_col.py` | Generate collection ops on the AI-GEN staging deck (takes a `Collection`, no aqt) |
 | `addon/health.py`, `fixes.py`, `state.py` | CLI version/self-check/update/rollback, fix buttons, learned facts (`user_files/state.json`) |
 | `addon/config.json` | Shipped defaults. `addon/meta.json` = **user's live settings** (gitignored) |
-| `tests/` | pytest; `fake_claude.py` / `fake_codex.py` stand in for real CLIs |
+| `tests/` | pytest; `fake_claude.py` / `fake_codex.py` stand in for real CLIs; `fakes.make_exe` wraps them as executables on any OS |
+| `.github/workflows/tests.yml` | Runs the tests on Windows, macOS and Linux on every push |
 | `scripts/package.py` | Builds `dist/anki_ai.ankiaddon` (skips meta.json, caches, `user_files/`) |
 
 ## Workflow
@@ -67,4 +68,5 @@ This repo is the add-on. For development, `addon/` is **symlinked** into Anki as
 | Adding formatting rules (bold, lists, colours, LaTeX) to one prompt in `grading.py` / `generate_ops.py` | Put them in `addon/style.md` so every prompt and both providers follow one guide. Task-specific reply shape (JSON keys) stays in the prompt |
 | Claiming "works in Anki" after tests pass | Tests use fake CLIs. Say it's unverified in Anki until the user restarts and confirms |
 | Committing `dist/`, `meta.json`, `user_files/` | All gitignored; check `git status` before committing |
+| New `subprocess` call without `**PROC_KW`, or a fake CLI made with `#!/bin/sh` + chmod | Breaks Windows (codepage, console windows, no shebangs). Use `session.PROC_KW` and `fakes.make_exe` |
 | Personal info in a commit (real deck names, `/Users/<name>` paths) | Use generic examples; the repo is public |
