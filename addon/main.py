@@ -237,7 +237,7 @@ def controls_html() -> str:
         ' &nbsp;·&nbsp; '
         '<a href=# onclick="pycmd(\'aiStudy:settings\');return false;">⚙ Settings</a>'
         ' &nbsp;·&nbsp; '
-        '<a href=# onclick="pycmd(\'aiStudy:generate\');return false;">✨ Generate</a></div>'
+        '<a href=# onclick="pycmd(\'aiStudy:generate\');return false;">✨ Generate/Update Cards</a></div>'
     )
 
 

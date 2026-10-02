@@ -330,7 +330,7 @@ class GeneratePage:
     def _page_html(self) -> str:
         return (
             f'{CSS}<div id="cfg"><a class="back" onclick="pycmd(\'aiGen:back\')">← Back</a>'
-            f"<h2>Generate cards</h2>"
+            f"<h2>Generate/Update Cards</h2>"
             f'<div id="log">{self._log_html()}</div>'
             f'<div id="refrow"><input id="ref" readonly tabindex="-1" value="{html.escape(self.ref)}" '
             f'placeholder="No reference chosen (optional)">'

@@ -28,7 +28,7 @@ Type what you want in plain words — "use opus", "give me 90 seconds to answer"
 - **Custom Generic Rules** — apply to every card.
 - **Deck Prompts** — one prompt per deck; subdecks inherit their parents'. Click a deck to see what applies to it.
 
-## Generate cards (✨ Generate)
+## Generate/Update Cards (✨ Generate/Update Cards)
 
 Next to ⚙ Settings. Optionally pick a **reference** — a file or folder on your **Desktop** (Choose folder… / Choose file…; text files only, e.g. .txt, .md, code). Then say what you want: "10 cards from these notes into Biology::Ch3", "improve my Chem cards using this file", "make card 3 shorter".
 
