@@ -7,6 +7,7 @@ What changed in each version, newest first. How the add-on works today is in [do
 - Windows: AI calls use UTF-8, so arrows, dashes, accents and non-English text no longer garble or crash, and no console window pops up per call.
 - The tutor's instructions are now handed to Claude as a file, not on the command line. Windows' `claude.cmd` would otherwise cut them off at the first line break.
 - Generate finds your real Desktop on Windows, including when OneDrive has moved it.
+- Windows: stopping the AI also stops the real CLI behind npm's `claude.cmd` / `codex.cmd`, so no stray processes stay behind. Generate reads Windows line endings cleanly and shows file names with `/`.
 - The tests now run on Windows, macOS and Linux on every push (GitHub Actions).
 
 ## v1.30 — Highlight to ask (2026-10-02)

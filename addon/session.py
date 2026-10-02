@@ -109,7 +109,12 @@ def system_prompt_file(cwd: str, text: str) -> str:
         tmp = f"{path}.{threading.get_ident()}.tmp"  # several probes may write the same prompt at once
         with open(tmp, "w", encoding="utf-8") as f:
             f.write(text)
-        os.replace(tmp, path)
+        try:
+            os.replace(tmp, path)
+        except OSError:  # Windows: another probe wrote it first and a CLI has it open — same content, keep it
+            os.remove(tmp)
+            if not os.path.exists(path):
+                raise
     return path
 
 
@@ -379,7 +384,10 @@ def _terminate(proc):
         proc.stdin.close()
     except OSError:
         pass
-    proc.terminate()
+    if os.name == "nt":  # npm's claude.cmd/codex.cmd: killing cmd.exe alone leaves the real CLI running
+        subprocess.run(["taskkill", "/F", "/T", "/PID", str(proc.pid)], capture_output=True, **PROC_KW)
+    else:
+        proc.terminate()
     try:
         proc.wait(timeout=3)
     except subprocess.TimeoutExpired:

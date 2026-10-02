@@ -86,11 +86,13 @@ def _read_text(path: Path, limit: int):
     if b"\0" in data[:8192]:
         return None
     try:
-        return data.decode("utf-8")
+        text = data.decode("utf-8")
     except UnicodeDecodeError as e:
         if e.start >= len(data) - 4:  # cut mid-character by the read limit
-            return data[:e.start].decode("utf-8")
-        return None
+            text = data[:e.start].decode("utf-8")
+        else:
+            return None
+    return text.replace("\r\n", "\n")  # Windows line endings
 
 
 def read_references(path: str, root: Path = None) -> dict:
@@ -105,7 +107,7 @@ def read_references(path: str, root: Path = None) -> dict:
             candidates += [Path(dirpath) / f for f in sorted(filenames) if not f.startswith(".")]
     files, skipped, used, truncated = [], [], 0, False
     for f in candidates:
-        name = str(f.relative_to(base))
+        name = f.relative_to(base).as_posix()  # "sub/b.txt" on every OS
         if len(files) >= MAX_FILES or used >= MAX_REF_CHARS:
             truncated = True
             break
