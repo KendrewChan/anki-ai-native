@@ -93,6 +93,11 @@ def verdict_html(verdict: dict, user_answer: str, note: str = "") -> str:
     )
 
 
+def append_verdict_note_js(note: str) -> str:
+    snippet = json.dumps(f'<div class="ai-err">{html.escape(note)}</div>')
+    return f"(function(v){{ if (v) v.insertAdjacentHTML('beforeend', {snippet}); }})(document.querySelector('.ai-verdict'));"
+
+
 def js_call(fn: str, *args) -> str:
     return f"window.aiStudy && aiStudy.{fn}({', '.join(json.dumps(a) for a in args)});"
 
