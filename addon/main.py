@@ -106,7 +106,7 @@ def on_card_will_show(text: str, card, kind: str) -> str:
     if kind == "reviewQuestion" and active(card):
         return ui.question_html(text, rewrite_enabled(card))
     if kind == "reviewAnswer" and card.id in S.verdicts:
-        return ui.verdict_html(*S.verdicts[card.id], S.edit_status.get(card.id)) + ui.model_answer_html(text)
+        return ui.verdict_html(*S.verdicts[card.id], S.edit_status.get(card.id)) + text
     return text
 
 

@@ -26,7 +26,15 @@ def test_parse_grade_from_fenced_reply():
 
 def test_parse_grade_per_question_normalised():
     r = grading.parse_grade('{"verdict":"partial","per_question":[{"verdict":"Correct","note":" ok "},{"verdict":"??"},"junk"]}')
-    assert r["per_question"] == [{"verdict": "correct", "note": "ok"}, {"verdict": "partial", "note": ""}]
+    assert r["per_question"] == [{"verdict": "correct", "note": "ok", "parts": []},
+                                 {"verdict": "partial", "note": "", "parts": []}]
+
+
+def test_parse_grade_parts_cleaned():
+    r = grading.parse_grade('{"verdict":"partial","per_question":[{"verdict":"partial","parts":'
+                            '[{"text":" a b ","verdict":"Correct"},{"text":"","verdict":"wrong"},{"text":"c","verdict":"?"},"x"]}]}')
+    assert r["per_question"][0]["parts"] == [{"text": "a b", "verdict": "correct"}]
+    assert "parts" in grading.SYSTEM_PROMPT
 
 
 def test_parse_grade_clamps_and_defaults_ease():
@@ -128,12 +136,20 @@ def test_verdict_html_colours_wrong_red_partial_orange():
     assert 'class="ai-you ai-you-wrong"' in single
 
 
-def test_model_answer_green_back_only_missed_kept_plain():
-    ans = "<b>Q</b><hr id=answer>Back fact<hr><b>Missed (2026-10-01)</b><ul><li>m</li></ul>"
-    out = ui.model_answer_html(ans)
-    assert out.startswith("<b>Q</b><hr id=answer><div class=\"ai-model\">Back fact")
-    assert '<div class="ai-missed-sec"><hr><b>Missed (2026-10-01)</b><ul><li>m</li></ul></div>' in out
-    assert ui.model_answer_html("just back").startswith('<div class="ai-model">just back')
+def test_verdict_html_colours_quoted_parts_of_answer():
+    parts = [{"text": "uses a  heap", "verdict": "correct"}, {"text": "o(n)", "verdict": "wrong"},
+             {"text": "not in answer", "verdict": "partial"}]
+    v = {"verdict": "partial", "ease": 2, "feedback": "f", "missed": [],
+         "per_question": [{"verdict": "partial", "note": "", "parts": parts}]}
+    html = ui.verdict_html(v, ["Q"], ["It uses a heap, so O(n) <fast>"])
+    assert ('<div class="ai-you ai-you-marked">You: It <span class="ai-mark-correct">uses a heap</span>, so '
+            '<span class="ai-mark-wrong">O(n)</span> &lt;fast&gt;</div>') in html
+    single = ui.verdict_html(dict(v, per_question=[{"verdict": "wrong", "note": "", "parts": parts[2:]}]), [], ["x"])
+    assert '<div class="ai-you ai-you-partial">You: x</div>' in single  # nothing found: whole answer by grade
+
+
+def test_answer_side_keeps_model_answer_plain():
+    assert "ai-model" not in ui.CSS and not hasattr(ui, "model_answer_html")
 
 
 def test_missed_html_nothing():

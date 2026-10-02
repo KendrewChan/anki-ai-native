@@ -2,6 +2,11 @@
 
 What changed in each version, newest first. How the add-on works today is in [docs/spec.md](docs/spec.md).
 
+## v1.20 — Colour your answer, not the model answer (2026-10-02)
+
+- When grading, the AI quotes the claims in your answer with a verdict each. The parts you got right show green, partly right orange, wrong red.
+- The card's answer is no longer green: it shows in its normal colours.
+
 ## v1.19 — Formatting guide and math (2026-10-02)
 
 - New `addon/style.md`, a formatting guide added to every AI prompt (tutor, note edit, Generate). It covers sparing bold, Anki HTML in card fields (lists only for parallel items, tables only for comparisons, no underline or colour unless asked) and LaTeX in `\( \)` / `\[ \]`.

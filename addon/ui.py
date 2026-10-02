@@ -2,6 +2,7 @@
 
 import html
 import json
+import re
 
 from . import grading
 
@@ -32,7 +33,8 @@ CSS = """
 .ai-pq { margin: 0.6em 0; } .ai-pq-q { font-weight: 600; white-space: pre-wrap; }
 .ai-you { opacity: 0.75; white-space: pre-wrap; margin: 0.2em 0; }
 .ai-you.ai-you-wrong { color: #d33; opacity: 1; } .ai-you.ai-you-partial { color: #d97706; opacity: 1; }
-.ai-model, .ai-mark-correct { color: #27864a; } .ai-mark-partial { color: #d97706; } .ai-mark-wrong { color: #d33; }
+.ai-you.ai-you-marked { opacity: 1; }
+.ai-mark-correct { color: #27864a; } .ai-mark-partial { color: #d97706; } .ai-mark-wrong { color: #d33; }
 #ai-edit { text-align: left; width: min(92vw, 70em); box-sizing: border-box; margin: 0 auto 0.6em; }
 #ai-edit input { width: 100%; box-sizing: border-box; padding: 0.45em 0.6em; font: inherit; font-size: 0.9em;
                  border-radius: 6px; border: 1px solid #8888; background: transparent; color: inherit; }
@@ -200,11 +202,12 @@ def verdict_html(verdict: dict, questions: list, answers: list, edit_status=None
             a = answers[i] if i < len(answers) else ""
             rows.append(
                 f'<div class="ai-pq"><span class="ai-pq-q"><span class="ai-mark-{pq["verdict"]}">{marks[pq["verdict"]]}</span> {grading.rich(q)}</span>'
-                f'<div class="ai-you{_you_class(pq["verdict"])}">You: {html.escape(a.strip() or "(blank)")}</div>'
+                f'{_you_html(a, pq["verdict"], pq.get("parts"))}'
                 f'<div>{grading.rich(pq["note"])}</div></div>'
             )
     else:
-        rows.append(f'<div class="ai-you{_you_class(v)}">You: {html.escape(chr(10).join(a for a in answers if a.strip()))}</div>')
+        parts = per_q[0].get("parts") if len(per_q) == 1 else None
+        rows.append(_you_html(chr(10).join(a for a in answers if a.strip()), v, parts))
     missed = verdict["missed"]
     missed_part = (
         "<b>Missed:</b><ul>" + "".join(f"<li>{grading.rich(m)}</li>" for m in missed) + "</ul>"
@@ -223,17 +226,28 @@ def _you_class(verdict: str) -> str:
     return {"wrong": " ai-you-wrong", "partial": " ai-you-partial"}.get(verdict, "")
 
 
-# The Missed section keeps the card's own text colour inside the green model answer.
-MISSED_COLOR_JS = ("<script>document.querySelectorAll('.ai-missed-sec').forEach("
-                   "e => e.style.color = getComputedStyle(document.body).color);</script>")
+def _you_html(answer: str, verdict: str, parts) -> str:
+    """The user's answer: the AI's quoted parts coloured by verdict, else the whole answer red/orange by its grade."""
+    text = answer.strip() or "(blank)"
+    marked = _marked_answer(text, parts or [])
+    if marked:
+        return f'<div class="ai-you ai-you-marked">You: {marked}</div>'
+    return f'<div class="ai-you{_you_class(verdict)}">You: {html.escape(text)}</div>'
 
-
-def model_answer_html(answer: str) -> str:
-    """Graded answer side: the card's back (after <hr id=answer>) in green, except its Missed section."""
-    front, back = grading.split_answer(answer)
-    back = grading.MISSED_SECTION.sub(lambda m: f'<div class="ai-missed-sec">{m.group(0)}</div>', back)
-    return f'{front}<div class="ai-model">{back}</div>{MISSED_COLOR_JS}'
-
+def _marked_answer(text: str, parts: list) -> str:
+    """HTML of text with each part (found in order, whitespace and case tolerant) in its verdict colour; '' if none found."""
+    spans, cursor = [], 0
+    for p in parts:
+        pat = re.compile(r"\s+".join(map(re.escape, p["text"].split())), re.I)
+        m = pat.search(text, cursor) or pat.search(text)
+        if m and m.end() > m.start() and not any(m.start() < e and s < m.end() for s, e, _ in spans):
+            spans.append((m.start(), m.end(), p["verdict"]))
+            cursor = m.end()
+    out, pos = [], 0
+    for s, e, v in sorted(spans):
+        out.append(f'{html.escape(text[pos:s])}<span class="ai-mark-{v}">{html.escape(text[s:e])}</span>')
+        pos = e
+    return "".join(out) + html.escape(text[pos:]) if spans else ""
 
 def append_verdict_note_js(note: str) -> str:
     snippet = json.dumps(f'<div class="ai-err">{html.escape(note)}</div>')
