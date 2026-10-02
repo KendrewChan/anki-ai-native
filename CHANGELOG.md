@@ -2,6 +2,10 @@
 
 What changed in each version, newest first. How the add-on works today is in [docs/spec.md](docs/spec.md).
 
+## v1.29 — Grading in view (2026-10-02)
+
+- The grading and the Ask AI box now sit right below the front of the card instead of above it, so they are on screen as soon as the answer shows (Anki scrolls the front out of view).
+
 ## v1.28 — Quick deck prompts (2026-10-02)
 
 - Clicking a deck under Deck Settings fills the chat box with `Deck prompt for "<deck>": ` and puts the cursor at the end. Your own typed message is never overwritten. The chat box now stays pinned at the top while you scroll.

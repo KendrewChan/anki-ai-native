@@ -106,7 +106,9 @@ def on_card_will_show(text: str, card, kind: str) -> str:
     if kind == "reviewQuestion" and active(card):
         return ui.question_html(text, rewrite_enabled(card))
     if kind == "reviewAnswer" and card.id in S.verdicts:
-        return ui.verdict_html(*S.verdicts[card.id], S.edit_status.get(card.id)) + text
+        # Below the front: Anki scrolls <hr id=answer> to the top, so anything above it starts off-screen.
+        front, back = grading.split_answer(text)
+        return front + ui.verdict_html(*S.verdicts[card.id], S.edit_status.get(card.id)) + back
     return text
 
 
