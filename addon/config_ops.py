@@ -16,6 +16,7 @@ SETTINGS = {
     "ask_timeout_s": "seconds to wait for the sharp question (5-600)",
     "grade_timeout_s": "seconds to wait for a grade (5-600)",
     "missed_append": "true/false — append Missed bullets to the card's Back after grading",
+    "sharp_questions": "true/false — the AI first turns each card into sharp questions; false = answer the card's own question as written (one AI call per card, faster)",
     "claude_path": "absolute path to the claude CLI executable, or \"\" to auto-detect",
     "codex_path": "absolute path to the codex CLI executable, or \"\" to auto-detect",
 }
@@ -147,14 +148,14 @@ def _validate(key: str, value, is_executable, provider: str = "claude"):
         if not lo <= v <= hi:
             raise ValueError(f"{key} must be between {lo} and {hi} seconds")
         return v
-    if key == "missed_append":
+    if key in ("missed_append", "sharp_questions"):
         if isinstance(value, bool):
             return value
         if str(value).lower() in ("true", "on", "yes", "1"):
             return True
         if str(value).lower() in ("false", "off", "no", "0"):
             return False
-        raise ValueError("missed_append must be true or false")
+        raise ValueError(f"{key} must be true or false")
     if key in ("claude_path", "codex_path"):
         if str(value).strip().lower() in ("", "auto"):
             return ""

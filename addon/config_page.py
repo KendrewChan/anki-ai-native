@@ -389,9 +389,10 @@ class ConfigPage:
         )
         select = f'<select onchange="pycmd(\'aiCfg:provider:\' + this.value)">{options}</select>'
         rows = [("Provider", select), ("Login", login)] + [
-            (label, html.escape(str(cfg.get(key))))
+            (label, html.escape(str(cfg.get(key, key == "sharp_questions"))))  # saved configs predate it: on
             for label, key in (("Ask timeout (s)", "ask_timeout_s"),
-                               ("Grade timeout (s)", "grade_timeout_s"), ("Missed append", "missed_append"))
+                               ("Grade timeout (s)", "grade_timeout_s"), ("Missed append", "missed_append"),
+                               ("Sharp questions", "sharp_questions"))
         ]
         configured = model_for(cfg)
         current = html.escape(self._model_name(provider, found, configured))

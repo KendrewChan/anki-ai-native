@@ -107,7 +107,7 @@ HINT = "Enter: next box / submit · Shift+Enter: new line · Enter with all boxe
 
 
 def question_html(original: str, rewrite: bool) -> str:
-    """Wrap Anki's rendered question. rewrite=False (cloze) shows the original as the question."""
+    """Wrap Anki's rendered question. rewrite=False (cloze, or sharp questions off) shows the original as the question."""
     if rewrite:
         orig = f'<details id="ai-orig"><summary>Show original</summary>{original}</details>'
         label = '<div class="ai-q loading">Thinking of a sharp question…</div>'

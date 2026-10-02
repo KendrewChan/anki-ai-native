@@ -28,6 +28,7 @@ def test_set_model_and_timeout_logged():
     ({"set": {"model": "gpt-4"}}, "unknown model"),
     ({"set": {"ask_timeout_s": 2}}, "between 5 and 600"),
     ({"set": {"missed_append": "maybe"}}, "true or false"),
+    ({"set": {"sharp_questions": "maybe"}}, "sharp_questions must be true or false"),
     ({"set": {"colour": "red"}}, "unknown setting"),
     ({"remove_custom": 3}, "no custom rule 3"),
     ({"undo": True}, "nothing to undo"),
@@ -37,6 +38,14 @@ def test_invalid_changes_rejected_without_touching_config(change, msg):
     new, log, _, hist = apply([change])
     assert new == BASE and hist == []
     assert log[0].startswith("✗") and msg in log[0]
+
+
+def test_sharp_questions_toggle():
+    new, log, _, _ = apply([{"set": {"sharp_questions": "off"}}], cfg=dict(BASE, sharp_questions=True))
+    assert new["sharp_questions"] is False and log == ["✓ sharp_questions: true → false"]
+    new, _, _, _ = apply([{"set": {"sharp_questions": True}}], cfg=new)
+    assert new["sharp_questions"] is True
+    assert "sharp_questions" in config_ops.CONFIG_SYSTEM_PROMPT
 
 
 def test_claude_path_must_be_executable():

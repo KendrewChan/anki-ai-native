@@ -17,14 +17,14 @@ Study in the Anki reviewer with Claude as your tutor: it turns each card into sh
 ## Use
 
 - Under the deck list (and under **Study Now**): **AI Study: OFF · ⚙ Settings**. Click to turn it on — it is off every time Anki starts. Also in **Tools → AI Study mode**.
-- While reviewing: type answers (Enter = next box / submit, Shift+Enter = new line, Enter with all boxes empty = just show the answer). **Show original** reveals the card's real front.
+- While reviewing: type answers (Enter = next box / submit, Shift+Enter = new line, Enter with all boxes empty = just show the answer). **Show original** reveals the card's real front. Turn **sharp questions** off in settings to answer each card's own question as written (faster: one AI call per card).
 - The verdict shows above the answer; the recommended button is outlined. The card's Back keeps one **Missed (date)** section with your latest misses, replaced each review (turn off in settings).
 
 ## Settings (⚙ Settings)
 
 Type what you want in plain words — "use opus", "give me 90 seconds to answer", "grade more strictly", "for this deck, ask for code", "undo that".
 
-- **Configurations** — provider (Claude Code / Codex; "use codex"), model ("default" = the provider's), timeouts, missed-append, CLI path (auto-detected), login.
+- **Configurations** — provider (Claude Code / Codex; "use codex"), model ("default" = the provider's), timeouts, missed-append, sharp questions on/off, CLI path (auto-detected), login.
 - **Custom Generic Rules** — apply to every card.
 - **Deck Prompts** — one prompt per deck; subdecks inherit their parents'. Click a deck to see what applies to it.
 

@@ -70,7 +70,8 @@ def deck_rules(card, c: dict) -> list:
 
 
 def rewrite_enabled(card) -> bool:
-    return card.note_type()["type"] != MODEL_CLOZE
+    """Ask the AI for sharp questions first? Not for cloze cards, nor when the user turned it off."""
+    return cfg().get("sharp_questions", True) and card.note_type()["type"] != MODEL_CLOZE
 
 
 def eval_card(js: str):
