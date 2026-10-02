@@ -2,6 +2,13 @@
 
 What changed in each version, newest first. How the add-on works today is in [docs/spec.md](docs/spec.md).
 
+## v1.19 — Formatting guide and math (2026-10-02)
+
+- New `addon/style.md`, a formatting guide added to every AI prompt (tutor, note edit, Generate). It covers sparing bold, Anki HTML in card fields (lists only for parallel items, tables only for comparisons, no underline or colour unless asked) and LaTeX in `\( \)` / `\[ \]`.
+- Bold and math now render in questions, hints, feedback, per-question notes and Missed bullets. Sharp questions and hints are typeset with Anki's MathJax.
+- A sharp question asking for several parts lists them on separate lines as 1), 2), ….
+- LaTeX written with single backslashes no longer breaks reply parsing.
+
 ## v1.18 — Edit the note after grading (2026-10-02)
 
 - After grading, an **Ask AI to change this note** box sits above the verdict. The AI edits only that note's fields, the card redraws with the change, and Edit → Undo reverts it.

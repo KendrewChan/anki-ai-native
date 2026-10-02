@@ -5,7 +5,7 @@ import os
 from pathlib import Path
 
 from .config_ops import resolve_deck
-from .grading import parse_json_reply
+from .grading import STYLE_GUIDE, parse_json_reply
 
 TEMP_DECK = "AI-GEN"
 MAX_REF_CHARS = 150_000  # all reference text sent per message
@@ -39,6 +39,7 @@ Rules:
 - update/edit: use the card's own field names, include only fields you change, give their whole new content. Keep any "Missed (date)" section in a field exactly as it is.
 - To change a staged card use edit/remove, not a new add. Staged cards marked "approved" were approved by the user: leave them alone unless asked (editing one un-approves it).
 - If the request is unclear, ask a short question in "reply" with no changes."""
+GENERATE_SYSTEM_PROMPT += "\n\n" + STYLE_GUIDE
 
 
 # --- reference files ---

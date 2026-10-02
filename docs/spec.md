@@ -25,6 +25,7 @@ Run an AI study loop inside the Anki desktop reviewer: the AI turns each card in
 | `health.py` | Self-check, error classification, reviewer failure policy, update / rollback | no |
 | `fixes.py` | Fix buttons on Settings replies; talks to the page only through `cfg`, `provider`, `apply`, `login`, `say`, `refresh` | yes |
 | `state.py` | What the add-on learns about the CLIs: real model names, `last_good` versions. `user_files/state.json`, kept by Anki across updates; never in the config or its undo history | no |
+| `style.md` | Formatting guide (bold, note-field HTML, LaTeX) appended to the tutor, note-edit and Generate system prompts | — |
 | `config.json` | Shipped defaults (the user's settings live in the gitignored `meta.json`) | — |
 
 Everything that doesn't import `aqt` is unit-tested with plain pytest.
@@ -70,6 +71,13 @@ Only active while **AI Study** is ON, and only for cards whose home deck has AI 
 - It goes into the first existing field of `Back` → `Back Extra` → the note's last field.
 - The tutor prompt treats it as past gaps, not required content.
 - A write failure shows a red note; the review is unaffected.
+
+**Formatting** (`style.md`, `grading.rich`)
+- `style.md` is appended to every system prompt (tutor, note edit, Generate), so all providers follow one guide: plain text first; in short texts (questions, hints, notes, feedback, Missed) at most one `**bold**` key term; in note fields Anki HTML (`<b>`, `<i>`, lists for 3+ parallel items, tables for comparisons, `<code>`), no colour unless asked; math as LaTeX in `\( \)` / `\[ \]`, never `$`.
+- A sharp question that asks for several parts puts each on its own line, numbered `1)`, `2)` (questions keep line breaks on both sides).
+- Short texts are shown through `grading.rich`: HTML-escaped, then `**x**` → `<b>x</b>`. The same goes for Missed bullets saved into the note.
+- Math: Anki's reviewer typesets each card with MathJax, which covers the verdict. Sharp questions and hints arrive later, so `setQuestions` runs `MathJax.typesetPromise` on them.
+- Replies are JSON, so LaTeX needs doubled backslashes. `parse_json_reply` repairs the usual slip: invalid escapes such as `\(` or `\sqrt` are doubled and parsing retried, and control characters that single-backslash `\frac`, `\times`, `\beta` or `\right` decode to (form feed, tab, backspace, CR before a letter) are turned back into LaTeX. A single-backslash `\n…` command (`\neq`) can't be told apart from a newline, so it stays broken.
 
 **Prompt context**: rendered question and answer as plain text (no images). Custom Generic Rules go in the system prompt; each card sends its own home deck's prompt chain (`card.odid or card.did`, root → leaf, inner wins).
 

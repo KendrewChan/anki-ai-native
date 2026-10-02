@@ -29,7 +29,7 @@ CSS = """
 .ai-badge { display: inline-block; padding: 0.1em 0.55em; border-radius: 4px; font-weight: 700;
             color: #fff; font-size: 0.85em; letter-spacing: 0.04em; }
 .ai-wrong { background: #c0392b; } .ai-partial { background: #c27c0e; } .ai-correct { background: #27864a; }
-.ai-pq { margin: 0.6em 0; } .ai-pq-q { font-weight: 600; }
+.ai-pq { margin: 0.6em 0; } .ai-pq-q { font-weight: 600; white-space: pre-wrap; }
 .ai-you { opacity: 0.75; white-space: pre-wrap; margin: 0.2em 0; }
 .ai-you.ai-you-wrong { color: #d33; opacity: 1; } .ai-you.ai-you-partial { color: #d97706; opacity: 1; }
 .ai-model { color: #27864a; }
@@ -82,7 +82,7 @@ JS = """
     if (question !== null) {
       const label = document.createElement("div");
       label.className = "ai-q";
-      label.textContent = question;
+      label.innerHTML = question;  // safe HTML from grading.rich (escaped; only <b> added)
       if (hint) {
         const help = document.createElement("span");
         help.className = "ai-hint";
@@ -90,7 +90,7 @@ JS = """
         help.textContent = "?";
         const tip = document.createElement("span");
         tip.className = "tip";
-        tip.textContent = hint;
+        tip.innerHTML = hint;
         help.append(tip);
         label.append(help);
       }
@@ -111,6 +111,8 @@ JS = """
       qs.forEach((q, i) => addItem(qs.length > 1 ? (i + 1) + ". " + q : q, (hints || [])[i]));
       sizeBoxes();
       boxes()[0].focus();
+      if (window.MathJax && MathJax.typesetPromise)  // Anki typesets the card once; these arrived later
+        MathJax.startup.promise.then(() => MathJax.typesetPromise([list])).catch(() => {});
     },
     askFailed(msg) {
       list.innerHTML = "";
@@ -197,21 +199,21 @@ def verdict_html(verdict: dict, questions: list, answers: list, edit_status=None
         for i, (q, pq) in enumerate(zip(questions, per_q)):
             a = answers[i] if i < len(answers) else ""
             rows.append(
-                f'<div class="ai-pq"><span class="ai-pq-q">{marks[pq["verdict"]]} {html.escape(q)}</span>'
+                f'<div class="ai-pq"><span class="ai-pq-q">{marks[pq["verdict"]]} {grading.rich(q)}</span>'
                 f'<div class="ai-you{_you_class(pq["verdict"])}">You: {html.escape(a.strip() or "(blank)")}</div>'
-                f'<div>{html.escape(pq["note"])}</div></div>'
+                f'<div>{grading.rich(pq["note"])}</div></div>'
             )
     else:
         rows.append(f'<div class="ai-you{_you_class(v)}">You: {html.escape(chr(10).join(a for a in answers if a.strip()))}</div>')
     missed = verdict["missed"]
     missed_part = (
-        "<b>Missed:</b><ul>" + "".join(f"<li>{html.escape(m)}</li>" for m in missed) + "</ul>"
+        "<b>Missed:</b><ul>" + "".join(f"<li>{grading.rich(m)}</li>" for m in missed) + "</ul>"
         if missed else "<b>Missed:</b> nothing"
     )
     return (
         f'{CSS}{edit_bar_html(edit_status)}<div class="ai-verdict"><span class="ai-badge ai-{v}">{v.upper()}</span>'
         f'{"".join(rows)}'
-        f"<div style='margin-top:0.5em'>{html.escape(verdict['feedback'])}</div>"
+        f"<div style='margin-top:0.5em'>{grading.rich(verdict['feedback'])}</div>"
         f"<div style='margin-top:0.5em'>{missed_part}</div></div>"
     )
 

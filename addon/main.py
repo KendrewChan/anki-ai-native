@@ -134,7 +134,8 @@ def on_asked(card_id, result, err):
         return
     S.failures = 0
     S.ctx[card_id]["questions"] = result["questions"]
-    eval_card(ui.js_call("setQuestions", result["questions"], result["hints"]))
+    eval_card(ui.js_call("setQuestions", [grading.rich(q) for q in result["questions"]],
+                           [grading.rich(h) for h in result["hints"]]))
 
 
 def on_js_message(handled, message: str, context):

@@ -183,3 +183,29 @@ def test_verdict_html_has_edit_bar_with_status():
     assert html.index('id="ai-edit"') < html.index('class="ai-verdict"')
     assert '<div id="ai-edit-status" class="ai-err">Not saved: &lt;x&gt;</div>' in html
     assert 'id="ai-edit-status">' in ui.verdict_html(v, [], ["a"])
+
+
+def test_style_guide_in_every_system_prompt():
+    from addon import generate_ops
+    assert "\\( ... \\)" in grading.STYLE_GUIDE and "1) " in grading.SYSTEM_PROMPT
+    for prompt in (grading.system_prompt([]), grading.system_prompt(["be terse"]), grading.EDIT_SYSTEM_PROMPT,
+                   generate_ops.GENERATE_SYSTEM_PROMPT):
+        assert grading.STYLE_GUIDE in prompt
+
+
+def test_rich_escapes_and_bolds_keeps_latex():
+    assert grading.rich("**key** <i> \\(x^2\\)") == "<b>key</b> &lt;i&gt; \\(x^2\\)"
+    assert grading.missed_html(["**a**"], "D") == "<hr><b>Missed (D)</b><ul><li><b>a</b></li></ul>"
+
+
+def test_parse_json_reply_repairs_single_backslash_latex():
+    # \( and \sqrt are invalid JSON escapes; \frac and \times parse as form feed / tab
+    r = grading.parse_json_reply(r'{"feedback": "Use \(\sqrt{x}\) and \frac{a}{b} \times 2\nnext", "ok": "\\(y\\)"}')
+    assert r["feedback"] == "Use \\(\\sqrt{x}\\) and \\frac{a}{b} \\times 2\nnext" and r["ok"] == "\\(y\\)"
+
+
+def test_verdict_html_renders_bold_and_multiline_question():
+    v = {"verdict": "correct", "ease": 3, "feedback": "**Key** fact", "missed": [],
+         "per_question": [{"verdict": "correct", "note": "n"}]}
+    html = ui.verdict_html(v, ["Explain:\n1) a\n2) b"], ["x"])
+    assert "<b>Key</b> fact" in html and "Explain:\n1) a\n2) b" in html

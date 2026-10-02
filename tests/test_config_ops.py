@@ -86,7 +86,7 @@ def test_config_prompt_lists_settings_rules_and_login():
 
 
 def test_tutor_system_prompt_appends_custom_rules():
-    assert grading.system_prompt([]) == grading.SYSTEM_PROMPT
+    assert grading.system_prompt([]) == f"{grading.SYSTEM_PROMPT}\n\n{grading.STYLE_GUIDE}"
     sp = grading.system_prompt(["grade strictly", " "])
     assert sp.startswith(grading.SYSTEM_PROMPT) and sp.endswith("- grade strictly")
 

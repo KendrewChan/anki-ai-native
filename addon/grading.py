@@ -3,6 +3,10 @@
 import html
 import json
 import re
+from pathlib import Path
+
+# How the AI formats text (bold, HTML fields, LaTeX); appended to every system prompt.
+STYLE_GUIDE = Path(__file__).with_name("style.md").read_text(encoding="utf-8").strip()
 
 SYSTEM_PROMPT = """You are a strict flashcard tutor inside Anki. The user studies one card at a time; this whole conversation is one study session.
 
@@ -11,6 +15,7 @@ Two kinds of message arrive:
 1. NEW CARD — you get the card's question and reference answer. Turn the question into sharp, concrete questions that force out the key facts of the reference answer. Prefer a specific scenario or "explain X and why Y" over "tell me about X". Never leak the answer, and never steer toward a different point than the reference answer makes.
    - Normally return ONE question. If the card bundles several distinct points (e.g. "X (a, b, c)" or "What is X? Why Y?"), return one question per point, at most 4.
    - If the question is already a single concrete question, return it unchanged.
+   - If one question asks for several parts, put each part on its own line, numbered: "Explain X:\n1) <part>\n2) <part>".
    - hints: one per question, in order — a nudge of at most 12 words that points toward the idea without giving the answer.
    Reply: {"questions": ["<question>", ...], "hints": ["<hint>", ...]}
 
@@ -30,10 +35,11 @@ Reply with the JSON object only. No prose, no code fences."""
 def system_prompt(custom: list) -> str:
     """Tutor system prompt plus the user's custom rules from the config page."""
     rules = [r for r in (custom or []) if str(r).strip()]
+    base = f"{SYSTEM_PROMPT}\n\n{STYLE_GUIDE}"
     if not rules:
-        return SYSTEM_PROMPT
+        return base
     listed = "\n".join(f"- {r}" for r in rules)
-    return f"{SYSTEM_PROMPT}\n\nUser's rules (follow them unless they conflict with the JSON reply format):\n{listed}"
+    return f"{base}\n\nUser's rules (follow them unless they conflict with the JSON reply format):\n{listed}"
 
 
 
@@ -96,10 +102,35 @@ def parse_json_reply(text: str) -> dict:
     end = text.rfind("}")
     if start == -1 or end < start:
         raise ValueError(f"no JSON object in reply: {text[:200]!r}")
-    obj = json.loads(text[start:end + 1])
+    raw = text[start:end + 1]
+    try:
+        obj = json.loads(raw)
+    except json.JSONDecodeError:
+        # LaTeX written with single backslashes (\( \sqrt …) is invalid JSON: double the stray ones and retry.
+        obj = json.loads(re.sub(r"\\(.)", lambda m: m.group(0) if m.group(1) in '"\\/bfnrtu' else "\\\\" + m.group(1),
+                                raw, flags=re.S))
     if not isinstance(obj, dict):
         raise ValueError("reply JSON is not an object")
-    return obj
+    return _fix_latex(obj)
+
+
+_LATEX_CTRL = {"\b": "\\b", "\f": "\\f", "\t": "\\t", "\r": "\\r"}
+
+
+def _fix_latex(value):
+    """Single-backslash \\frac, \\times, \\beta, \\right parse as control characters: turn them back into LaTeX."""
+    if isinstance(value, str):
+        return re.sub(r"[\b\f\t\r](?=[A-Za-z])", lambda m: _LATEX_CTRL[m.group()], value)
+    if isinstance(value, list):
+        return [_fix_latex(v) for v in value]
+    if isinstance(value, dict):
+        return {k: _fix_latex(v) for k, v in value.items()}
+    return value
+
+
+def rich(text: str) -> str:
+    """AI short text -> safe HTML: escaped, **bold** -> <b>. LaTeX \\( \\) passes through for Anki's MathJax."""
+    return re.sub(r"\*\*(.+?)\*\*", r"<b>\1</b>", html.escape(text))
 
 
 MAX_QUESTIONS = 4
@@ -155,7 +186,7 @@ MISSED_SECTION = re.compile(
 def missed_html(bullets: list, date: str) -> str:
     if not bullets:
         return f"<hr><b>Missed ({date})</b>: nothing"
-    items = "".join(f"<li>{html.escape(b)}</li>" for b in bullets)
+    items = "".join(f"<li>{rich(b)}</li>" for b in bullets)
     return f"<hr><b>Missed ({date})</b><ul>{items}</ul>"
 
 
@@ -178,6 +209,7 @@ Change only what the request asks for; keep each field's existing HTML style. A 
 Reply with JSON only, no code fences:
 {"reply": "<one short sentence to the user>", "fields": {"<field name>": "<the whole new field HTML>", ...}}
 Include only the fields you change; {} for none."""
+EDIT_SYSTEM_PROMPT += "\n\n" + STYLE_GUIDE
 
 
 def edit_prompt(fields: dict, request: str, questions: list, answers: list, verdict: dict,
