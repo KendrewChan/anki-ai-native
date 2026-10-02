@@ -174,13 +174,14 @@ def submit(payload: str):
 
 
 def append_missed(missed: list):
-    if not missed or not cfg().get("missed_append", True):
+    """Replace the card's Missed section with this review's misses (or "nothing") + today's date."""
+    if not cfg().get("missed_append", True):
         return
     note = mw.reviewer.card.note()
     field = grading.pick_missed_field(list(note.keys()))
     if field is None:
         return
-    note[field] += grading.missed_html(missed, datetime.date.today().isoformat())
+    note[field] = grading.replace_missed(note[field], missed, datetime.date.today().isoformat())
     (
         update_note(parent=mw, note=note)
         .failure(lambda e: eval_card(ui.append_verdict_note_js(f"Missed notes not saved: {e}")))

@@ -96,3 +96,7 @@ Only `main.py` imports Anki; everything else is unit-tested with plain pytest.
 - **Deck Prompts** shows the real Anki deck tree (collapsible; ● = has prompt). Clicking a deck selects it; a panel shows its own prompt plus inherited ones. One free-text prompt per deck, edited via the CLI (`set_deck_prompt {deck, prompt}` replaces; `clear_deck_prompt`). The AI gets the deck list, existing prompts and the selected deck; names resolve exact → case-insensitive → unique leaf name, else rejected (ambiguous / unknown).
 - Stored as `deck_prompts: {deck_id: prompt}` — survives renames; prompts of deleted decks are pruned on the next save.
 - While studying, each card sends its **own home deck's** chain (`card.odid or card.did`; root → leaf, inner wins) inside the ask/grade message, since one session mixes subdecks.
+
+## v1.3 — single Missed section (2026-10-02)
+
+Each graded review **replaces** the card's Missed section (in the field chosen by `Back` → `Back Extra` → last field) with exactly one `<hr><b>Missed (YYYY-MM-DD)</b><ul>…</ul>` — or `…</b>: nothing` for a clean review — so the Back always shows the latest misses and when the card was last worked on. One date, in the title. Older Missed sections are removed on the next write. The tutor prompt labels the section as past gaps, not required content. Per-request conversation memory is not needed: the card itself carries the history.

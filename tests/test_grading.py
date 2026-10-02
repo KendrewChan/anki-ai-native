@@ -107,3 +107,26 @@ def test_verdict_html_per_question_rows():
          "per_question": [{"verdict": "correct", "note": "n1"}, {"verdict": "wrong", "note": "n2"}]}
     html = ui.verdict_html(v, ["Q one", "Q two"], ["a1", ""])
     assert "✓ Q one" in html and "✗ Q two" in html and "(blank)" in html and "<li>m</li>" in html
+
+
+def test_missed_html_nothing():
+    assert grading.missed_html([], "2026-10-09") == "<hr><b>Missed (2026-10-09)</b>: nothing"
+
+
+def test_replace_missed_keeps_only_latest_section():
+    back = ("<ul><li>real answer</li></ul>"
+            "<hr><b>Missed (2026-09-26)</b><ul><li>old one</li></ul>"
+            "<hr><b>Missed (2026-10-02)</b><ul><li>old two</li><li>x</li></ul>"
+            "<hr><b>Missed (2026-10-05)</b>: nothing")
+    out = grading.replace_missed(back, ["new"], "2026-10-09")
+    assert out == "<ul><li>real answer</li></ul><hr><b>Missed (2026-10-09)</b><ul><li>new</li></ul>"
+
+
+def test_replace_missed_clean_review_still_records_date():
+    out = grading.replace_missed("A<hr><b>Missed (2026-09-26)</b><ul><li>old</li></ul>", [], "2026-10-09")
+    assert out == "A<hr><b>Missed (2026-10-09)</b>: nothing"
+
+
+def test_replace_missed_tolerates_editor_reformatting_and_keeps_other_hr():
+    back = "A<hr>B\n<hr />\n<b> Missed (2026-09-26) </b>\n<ul>\n<li>old</li>\n</ul>"
+    assert grading.replace_missed(back, ["n"], "D") == "A<hr>B<hr><b>Missed (D)</b><ul><li>n</li></ul>"

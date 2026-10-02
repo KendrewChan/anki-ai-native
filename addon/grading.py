@@ -19,7 +19,7 @@ Two kinds of message arrive:
    - ease: wrong=1, partial=2, correct=3, correct AND complete and crisp=4.
    - feedback: one or two blunt sentences — fix what is wrong, add the single most important missing piece. No praise.
    - missed: facts in the reference answer the user did not give, each at most 12 words, specific facts not vague topics. [] if nothing.
-   If you notice the user repeating a gap from earlier in this session, say so in feedback.
+   The reference answer may end with a "Missed (date)" section: what the user missed the last time they reviewed this card, and when. It is NOT part of the required answer. If the user misses the same point again, say so plainly in feedback.
    Reply: {"per_question": [...], "verdict": "...", "ease": N, "feedback": "...", "missed": ["..."]}
 
 A card may come with "Deck rules" — instructions for the deck it belongs to, outermost deck first; inner (more specific) decks win on conflict. Follow them for that card only.
@@ -140,9 +140,22 @@ def parse_grade(text: str) -> dict:
     }
 
 
+# A Missed section as written by this add-on (tolerant of editor reformatting).
+MISSED_SECTION = re.compile(
+    r"\s*<hr[^>]*>\s*<b>\s*Missed\s*\([^)]*\)\s*</b>\s*(?::\s*nothing|<ul>.*?</ul>)?", re.I | re.S
+)
+
+
 def missed_html(bullets: list, date: str) -> str:
+    if not bullets:
+        return f"<hr><b>Missed ({date})</b>: nothing"
     items = "".join(f"<li>{html.escape(b)}</li>" for b in bullets)
     return f"<hr><b>Missed ({date})</b><ul>{items}</ul>"
+
+
+def replace_missed(field_html: str, bullets: list, date: str) -> str:
+    """Keep exactly one Missed section: the latest review's misses (or "nothing") and its date."""
+    return MISSED_SECTION.sub("", field_html).rstrip() + missed_html(bullets, date)
 
 
 def pick_missed_field(field_names: list):
