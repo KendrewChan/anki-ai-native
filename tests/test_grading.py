@@ -49,8 +49,8 @@ def test_parse_grade_rejects_bad_replies(reply):
 
 
 def test_parse_questions_list_capped_and_cleaned():
-    r = grading.parse_questions('{"questions":[" a ","","b","c","d","e"]}')
-    assert r["questions"] == ["a", "b", "c", "d"]
+    r = grading.parse_questions('{"questions":[" a ","","b","c","d","e","f","g","h","i"]}')
+    assert r["questions"] == ["a", "b", "c", "d", "e", "f", "g", "h"] and r["show_original"] is False
     assert [(it["num"], it["text"], it["hint"], it["parts"]) for it in r["items"]][:2] == [("1.", "a", "", []), ("2.", "b", "", [])]
 
 
@@ -257,3 +257,9 @@ def test_verdict_html_renders_bold_and_multiline_question():
     assert "<b>Key</b> fact" in html and "</span> Explain:\n1. a\n2. b" in html
     two = ui.verdict_html(dict(v, per_question=v["per_question"] * 2), ["A", "B:\n2.1 x"], ["x", "y"])
     assert "</span> 1. A" in two and "</span> 2. B:\n2.1 x" in two
+
+
+def test_deck_rules_override_defaults_and_can_show_original():
+    assert grading.parse_questions('{"questions":["a"],"show_original":true}')["show_original"] is True
+    assert grading.parse_questions('{"questions":["a"],"show_original":"yes"}')["show_original"] is False
+    assert "override the defaults" in grading.SYSTEM_PROMPT and "up to 8" in grading.SYSTEM_PROMPT

@@ -2,6 +2,11 @@
 
 What changed in each version, newest first. How the add-on works today is in [docs/spec.md](docs/spec.md).
 
+## v1.23 — Deck prompts can shape the questions (2026-10-02)
+
+- Deck prompts now override the tutor's defaults: number of questions (up to 8), their wording and sections, what to grade on. The AI can also show the card's own question open above its questions.
+- Settings warns when a deck prompt shapes the question side but that deck has Sharp questions off, since such prompts need it on.
+
 ## v1.22 — Your answer as graded bullet points (2026-10-02)
 
 - The verdict lists your answer as short claims instead of repeating it. Each is green, orange or red, and orange or red ones say what's off and what's right.

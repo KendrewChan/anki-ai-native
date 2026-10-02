@@ -125,8 +125,9 @@ JS = """
   }
 
   window.aiStudy = {
-    setQuestions(qs) {
+    setQuestions(qs, showOriginal) {
       if (submitted) return;
+      if (orig && showOriginal) orig.open = true;
       list.innerHTML = "";
       qs.forEach(addItem);
       sizeBoxes();

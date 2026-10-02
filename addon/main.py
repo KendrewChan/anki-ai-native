@@ -134,7 +134,7 @@ def on_asked(card_id, result, err):
         return
     S.failures = 0
     S.ctx[card_id]["questions"] = result["questions"]
-    eval_card(ui.js_call("setQuestions", ui.display_items(result["items"])))
+    eval_card(ui.js_call("setQuestions", ui.display_items(result["items"]), result["show_original"]))
 
 
 def on_js_message(handled, message: str, context):

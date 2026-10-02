@@ -13,11 +13,12 @@ SYSTEM_PROMPT = """You are a strict flashcard tutor inside Anki. The user studie
 Two kinds of message arrive:
 
 1. NEW CARD — you get the card's question and reference answer. Turn the question into sharp, concrete questions that force out the key facts of the reference answer. Prefer a specific scenario or "explain X and why Y" over "tell me about X". Never leak the answer, and never steer toward a different point than the reference answer makes.
-   - Normally return ONE question. If the card bundles several distinct points (e.g. "X (a, b, c)" or "What is X? Why Y?"), return one question per point, at most 4.
+   - Normally return ONE question. If the card bundles several distinct points (e.g. "X (a, b, c)" or "What is X? Why Y?"), return one question per point, at most 4 (deck rules may ask for more, up to 8).
    - If the question is already a single concrete question, return it unchanged.
    - If one question asks for several parts, return it as {"question": "<stem>", "parts": ["<part>", ...]} instead of a string; don't number the parts yourself.
    - hints: one per question, in order — a nudge of at most 12 words that points toward the idea without giving the answer. For a question with parts, its hint is a list with one hint per part.
-   Reply: {"questions": ["<question>" or {"question": "...", "parts": [...]}, ...], "hints": ["<hint>" or ["<hint per part>", ...], ...]}
+   - show_original: true when the user should see the card's own question as written above your questions (e.g. a deck rule says to present it); otherwise false (it stays folded).
+   Reply: {"questions": ["<question>" or {"question": "...", "parts": [...]}, ...], "hints": ["<hint>" or ["<hint per part>", ...], ...], "show_original": false}
 
 2. GRADE — you get the card again plus the user's free-text answer to each question asked. Judge ONLY against this card's reference answer; ignore earlier cards. Match each answer to its own question; a blank answer is wrong for that question.
    - per_question: for each question in order, {"verdict": "wrong"|"partial"|"correct", "note": "<at most 15 words>", "parts": [{"text": "<one claim from the user's answer>", "verdict": "wrong"|"partial"|"correct", "why": "<partial/wrong: what is off and what is right, at most 15 words; \"\" when correct>"}, ...]}.
@@ -30,7 +31,7 @@ Two kinds of message arrive:
    The reference answer may end with a "Missed (date)" section: what the user missed the last time they reviewed this card, and when. It is NOT part of the required answer. If the user misses the same point again, say so plainly in feedback.
    Reply: {"per_question": [...], "verdict": "...", "ease": N, "feedback": "...", "missed": ["..."]}
 
-A card may come with "Deck rules" — instructions for the deck it belongs to, outermost deck first; inner (more specific) decks win on conflict. Follow them for that card only.
+A card may come with "Deck rules" — instructions for the deck it belongs to, outermost deck first; inner (more specific) decks win on conflict. Follow them for that card only. They override the defaults above (how many questions, their wording and sections, what to grade on), but never the JSON reply format.
 
 Reply with the JSON object only. No prose, no code fences."""
 
@@ -135,7 +136,7 @@ def rich(text: str) -> str:
     return re.sub(r"\*\*(.+?)\*\*", r"<b>\1</b>", html.escape(text))
 
 
-MAX_QUESTIONS = 4
+MAX_QUESTIONS = 8  # the prompt asks for at most 4 unless deck rules want more
 
 
 def parse_questions(text: str) -> dict:
@@ -170,7 +171,7 @@ def parse_questions(text: str) -> dict:
         items.append({"num": f"{i}." if many else "", "text": stem, "hint": "" if parts else hs[0],
                       "parts": [{"label": lb, "text": p, "hint": ph} for lb, p, ph in zip(labels, parts, part_hints)]})
         questions.append("\n".join([stem] + [f"{lb} {p}" for lb, p in zip(labels, parts)]).strip())
-    return {"questions": questions, "items": items}
+    return {"questions": questions, "items": items, "show_original": obj.get("show_original") is True}
 
 
 def parse_grade(text: str) -> dict:
