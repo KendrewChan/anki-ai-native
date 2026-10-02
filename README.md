@@ -5,7 +5,9 @@ Study in the Anki reviewer with Claude as your tutor: it turns each card into sh
 ## Requirements
 
 - Anki desktop (built and tested on 26.9.2, macOS).
-- [Claude Code](https://claude.com/claude-code) installed and logged in (`claude auth login`) with **your own** Claude subscription or account. The add-on runs your local `claude` CLI; it never sees your credentials.
+- One AI CLI, installed and logged in with **your own** subscription — the add-on runs it locally and never sees your credentials:
+  - [Claude Code](https://claude.com/claude-code) (`claude auth login`) — default, fastest (keeps one process open per study session), or
+  - [Codex CLI](https://github.com/openai/codex) (`codex login`, ChatGPT plan) — ~6 s per card.
 
 ## Install
 
@@ -22,7 +24,7 @@ Study in the Anki reviewer with Claude as your tutor: it turns each card into sh
 
 Type what you want in plain words — "use opus", "give me 90 seconds to answer", "grade more strictly", "for this deck, ask for code", "undo that".
 
-- **Configurations** — model, timeouts, missed-append, Claude path (auto-detected), login.
+- **Configurations** — provider (Claude Code / Codex; "use codex"), model ("default" = the provider's), timeouts, missed-append, CLI path (auto-detected), login.
 - **Custom Generic Rules** — apply to every card.
 - **Deck Prompts** — one prompt per deck; subdecks inherit their parents'. Click a deck to see what applies to it.
 

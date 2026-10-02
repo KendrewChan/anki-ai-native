@@ -178,13 +178,14 @@ def apply_changes(cfg: dict, changes: list, history: list, is_executable=None, d
             elif "set" in ch:
                 items = sorted((ch["set"] or {}).items(), key=lambda kv: kv[0] != "provider")
                 for key, value in items:
-                    v = _validate(key, value, is_executable, new.get("provider") or "claude")
+                    try:
+                        v = _validate(key, value, is_executable, new.get("provider") or "claude")
+                    except ValueError as e:
+                        log.append(f"✗ {e}")
+                        continue
                     log.append(f"✓ {key}: {_show(new.get(key))} → {_show(v)}")
-                    if key == "provider" and v != (new.get("provider") or "claude") and "model" not in dict(items):
-                        if new.get("model"):
-                            log.append(f"✓ model: {new['model']} → default")
-                        new["model"] = ""
                     new[key] = v
+                _fit_model_to_provider(new, log)
             elif "add_custom" in ch:
                 rule = str(ch["add_custom"]).strip()
                 if not rule:
@@ -228,6 +229,16 @@ def apply_changes(cfg: dict, changes: list, history: list, is_executable=None, d
     if new != before:
         history.append(before)
     return new, log, auth
+
+
+def _fit_model_to_provider(cfg: dict, log: list):
+    """A model that doesn't belong to the current provider (e.g. sonnet under codex) falls back to default."""
+    model = cfg.get("model") or ""
+    try:
+        _validate("model", model, None, cfg.get("provider") or "claude")
+    except ValueError:
+        log.append(f"✓ model: {model} → default (not valid for {cfg.get('provider')})")
+        cfg["model"] = ""
 
 
 def _copy(cfg: dict) -> dict:

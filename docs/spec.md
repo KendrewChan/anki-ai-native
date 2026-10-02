@@ -100,3 +100,12 @@ Only `main.py` imports Anki; everything else is unit-tested with plain pytest.
 ## v1.3 — single Missed section (2026-10-02)
 
 Each graded review **replaces** the card's Missed section (in the field chosen by `Back` → `Back Extra` → last field) with exactly one `<hr><b>Missed (YYYY-MM-DD)</b><ul>…</ul>` — or `…</b>: nothing` for a clean review — so the Back always shows the latest misses and when the card was last worked on. One date, in the title. Older Missed sections are removed on the next write. The tutor prompt labels the section as past gaps, not required content. Per-request conversation memory is not needed: the card itself carries the history.
+
+## v1.4 — providers: Claude Code + Codex (2026-10-02)
+
+- `provider`: `claude` (default) or `codex`. API keys and other CLIs (Gemini, opencode) deferred.
+- Requests are **stateless**: each prompt carries the card, questions, answers, deck rules, and the card's last Missed section — no conversation memory needed. Claude keeps its long-running process only to skip startup.
+- **Codex backend**: one `codex exec --json … -` per message, system prompt prepended on stdin, answer = last `agent_message` event; `error` / `turn.failed` / non-zero exit → errors ("limit" in text → usage limit). Isolation verified live on codex-cli 0.152.0: `--ephemeral --ignore-user-config --ignore-rules --skip-git-repo-check -s read-only --disable shell_tool|apps|browser_use|computer_use|plugins -c web_search="disabled"`, run in an empty temp dir. ~6 s per call.
+- `model` = `""` → provider default; switching provider resets a model that doesn't fit (e.g. `sonnet` under codex). Codex models: any OpenAI id.
+- Login per provider: Claude `claude auth status|login|logout` (JSON); Codex `codex login status` / `codex login` / `codex logout`.
+- Settings page: Provider row with **Use <other>** buttons (works even when the current provider's AI is broken), model shows "default", CLI path per provider (`claude_path`, `codex_path`, auto-detected).
