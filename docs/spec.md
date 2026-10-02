@@ -49,9 +49,9 @@ Only active while **AI Study** is ON. The ON/OFF link is on the home screen, on 
 **Question side**
 - With `sharp_questions` on (default), an ask request returns `{"questions": [1–4]}`, one per distinct point the card bundles. Otherwise the card's own question is used.
 - Cloze cards always use their own blanked question.
-- Layout: a collapsed **Show original** (Anki's normal question) at the top, then a question + answer box pair for each question.
+- Layout: a collapsed **Show original** (Anki's normal question) at the top, then a question + answer box pair for each question. With sharp questions, no box is shown until `ask` returns (only "Thinking of a sharp question…"). If `ask` fails, one box appears under the opened original. Without sharp questions (or for cloze), the original is shown with its box ready at once.
 - **Enter** moves to the next box; Enter in the last box submits all. **Shift+Enter** inserts a newline. Enter with every box empty shows the plain answer, with no verdict.
-- Anki shortcuts don't fire while typing. Submitting before `ask` returns is allowed (it queues).
+- Anki shortcuts don't fire while typing. While `ask` is pending there is no box to type in, so Anki's own keys (e.g. Space to show the answer) still work.
 
 **Answer side**
 - A grade request returns `{"verdict": "wrong"|"partial"|"correct", "ease": 1-4, "feedback", "missed": [str], "per_question": [...]}`.

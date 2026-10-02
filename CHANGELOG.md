@@ -2,6 +2,10 @@
 
 What changed in each version, newest first. How the add-on works today is in [docs/spec.md](docs/spec.md).
 
+## v1.12 — No answer box before sharp questions (2026-10-02)
+
+- With **Sharp questions** on, the card no longer shows an answer box while the AI is thinking: the boxes appear with the questions, one per question. If the AI fails, a single box appears under the original. With it off (or for cloze), the box is ready immediately, as before.
+
 ## v1.11 — Simpler, safer (2026-10-02)
 
 - **Removed Try AI repair.** It let an AI edit the add-on's own code, and nothing but the prompt stopped it from dropping the isolation flags. Update, Roll back, switch provider and Copy error report remain.

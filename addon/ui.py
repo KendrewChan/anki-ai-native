@@ -32,6 +32,7 @@ JS = """
   const list = document.getElementById("ai-items");
   const orig = document.getElementById("ai-orig");
   const status = document.getElementById("ai-status");
+  const HINT = __HINT__;
   let submitted = false;
   const boxes = () => Array.from(list.querySelectorAll(".ai-ans"));
 
@@ -60,30 +61,36 @@ JS = """
     });
   }
 
+  function addItem(question) {
+    const item = document.createElement("div");
+    item.className = "ai-item";
+    if (question !== null) {
+      const label = document.createElement("div");
+      label.className = "ai-q";
+      label.textContent = question;
+      item.append(label);
+    }
+    const box = document.createElement("textarea");
+    box.className = "ai-ans";
+    if (!boxes().length) box.placeholder = HINT;
+    item.append(box);
+    list.append(item);
+    wire(box);
+  }
+
   window.aiStudy = {
     setQuestions(qs) {
       if (submitted) return;
-      const first = boxes()[0];
-      const kept = first ? first.value : "";
       list.innerHTML = "";
-      qs.forEach(function (q, i) {
-        const item = document.createElement("div");
-        item.className = "ai-item";
-        const label = document.createElement("div");
-        label.className = "ai-q";
-        label.textContent = qs.length > 1 ? (i + 1) + ". " + q : q;
-        const box = document.createElement("textarea");
-        box.className = "ai-ans";
-        if (i === 0) box.value = kept;
-        item.append(label, box);
-        list.append(item);
-        wire(box);
-      });
+      qs.forEach((q, i) => addItem(qs.length > 1 ? (i + 1) + ". " + q : q));
       sizeBoxes();
       boxes()[0].focus();
     },
     askFailed(msg) {
-      list.querySelectorAll(".ai-q").forEach(q => q.remove());
+      list.innerHTML = "";
+      addItem(null);  // no sharp question: answer the original, opened above
+      sizeBoxes();
+      boxes()[0].focus();
       if (orig) orig.open = true;
       this.setStatus(msg, true);
     },
@@ -98,7 +105,7 @@ JS = """
 
   boxes().forEach(wire);
   sizeBoxes();
-  setTimeout(function () { boxes()[0].focus(); }, 0);
+  setTimeout(function () { if (boxes().length) boxes()[0].focus(); }, 0);
 })();
 </script>
 """
@@ -107,15 +114,16 @@ HINT = "Enter: next box / submit · Shift+Enter: new line · Enter with all boxe
 
 
 def question_html(original: str, rewrite: bool) -> str:
-    """Wrap Anki's rendered question. rewrite=False (cloze, or sharp questions off) shows the original as the question."""
+    """Wrap Anki's rendered question. rewrite=True starts with no answer box: setQuestions adds one per sharp question.
+    rewrite=False (cloze, or sharp questions off) shows the original as the question with its box ready."""
     if rewrite:
         orig = f'<details id="ai-orig"><summary>Show original</summary>{original}</details>'
-        label = '<div class="ai-q loading">Thinking of a sharp question…</div>'
+        item = '<div class="ai-item"><div class="ai-q loading">Thinking of a sharp question…</div></div>'
     else:
         orig = f'<div id="ai-orig-plain">{original}</div>'
-        label = ""
-    item = f'<div class="ai-item">{label}<textarea class="ai-ans" placeholder="{HINT}"></textarea></div>'
-    return f'{CSS}<div id="ai-study">{orig}<div id="ai-items">{item}</div><div id="ai-status"></div></div>{JS}'
+        item = f'<div class="ai-item"><textarea class="ai-ans" placeholder="{HINT}"></textarea></div>'
+    js = JS.replace("__HINT__", json.dumps(HINT))
+    return f'{CSS}<div id="ai-study">{orig}<div id="ai-items">{item}</div><div id="ai-status"></div></div>{js}'
 
 
 def verdict_html(verdict: dict, questions: list, answers: list) -> str:

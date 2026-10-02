@@ -86,9 +86,10 @@ def test_grade_prompt_folds_extra_answers_into_last():
     assert "User's answer 1: a\nb" in p
 
 
-def test_question_html_show_original_on_top_then_box():
+def test_question_html_sharp_starts_without_box():
     html = ui.question_html("<b>orig</b>", rewrite=True)
-    assert html.index('id="ai-orig"') < html.index('class="ai-q loading"') < html.index('class="ai-ans"')
+    assert html.index('id="ai-orig"') < html.index('class="ai-q loading"')
+    assert '<textarea' not in html and "__HINT__" not in html
 
 
 def test_question_html_cloze_has_no_rewrite():

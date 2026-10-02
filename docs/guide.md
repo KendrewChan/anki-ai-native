@@ -17,7 +17,7 @@ Study in the Anki reviewer with an AI tutor (Claude Code or Codex): it turns eac
 ## Use
 
 - Under the deck list (and under **Study Now**): **AI Study: OFF · ⚙ Settings · ✨ Generate/Update Cards**. Click to turn it on — it is off every time Anki starts. Also in **Tools → AI Study mode**.
-- While reviewing: type answers (Enter = next box / submit, Shift+Enter = new line, Enter with all boxes empty = just show the answer). **Show original** reveals the card's real front. Click **Sharp questions** off in settings to answer each card's own question as written (faster: one AI call per card).
+- While reviewing: type answers (Enter = next box / submit, Shift+Enter = new line, Enter with all boxes empty = just show the answer). **Show original** reveals the card's real front. With sharp questions on, the answer boxes appear once the questions arrive. Click **Sharp questions** off in settings to answer each card's own question as written (faster: one AI call per card).
 - The verdict shows above the answer; the recommended button is outlined. The card's Back keeps one **Missed (date)** section with your latest misses, replaced each review (**Missed append** in settings).
 
 ## Settings (⚙ Settings)
