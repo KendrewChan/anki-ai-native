@@ -4,6 +4,7 @@ What changed in each version, newest first. How the add-on works today is in [do
 
 ## v1.29 — Grading in view (2026-10-02)
 
+- Deck Settings: clicking the selected deck again closes it and removes the `Deck prompt for` prefix. The empty Default deck is hidden, as in Anki's deck list.
 - The grading and the Ask AI box now sit right below the front of the card instead of above it, so they are on screen as soon as the answer shows (Anki scrolls the front out of view).
 
 ## v1.28 — Quick deck prompts (2026-10-02)

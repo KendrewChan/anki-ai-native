@@ -72,6 +72,16 @@ window.aiCfg = {
     cmd.setSelectionRange(cmd.value.length, cmd.value.length);
     cmd.dispatchEvent(new Event("input"));  // keep the saved draft in step
   },
+  deselect(deck) {
+    const d = document.querySelector(`#sections details[data-deck="${CSS.escape(deck)}"]`);
+    if (d) d.open = false;
+    const cmd = document.getElementById("cmd");
+    if (this.prefix && cmd.value.startsWith(this.prefix)) {
+      cmd.value = cmd.value.slice(this.prefix.length);
+      cmd.dispatchEvent(new Event("input"));
+    }
+    this.prefix = null;
+  },
   loadModels(e, sel) {
     if (sel.dataset.loaded) return;
     e.preventDefault();
@@ -153,7 +163,12 @@ class ConfigPage(ChatPage):
             self._update("Thinking…")
 
     def _on_message(self, command: str, arg: str):
-        if command == "select":
+        if command == "select" and arg and arg == self.selected:  # second click: fold it and drop the prefix
+            self.selected = None
+            self._update(None)
+            if mw.state == self.STATE:
+                mw.web.eval(f"window.aiCfg && aiCfg.deselect({json.dumps(arg)});")
+        elif command == "select":
             self.selected = arg
             self._update(None)
             if mw.state == self.STATE and arg:

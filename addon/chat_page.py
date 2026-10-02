@@ -12,7 +12,7 @@ def load_config(addon: str) -> dict:
 
 def deck_ids() -> dict:
     """Full deck name -> deck id (str), the shape config_ops expects."""
-    return {d.name: str(d.id) for d in mw.col.decks.all_names_and_ids()}
+    return {d.name: str(d.id) for d in mw.col.decks.all_names_and_ids(skip_empty_default=True)}  # as Anki's deck list
 
 
 CSS = """
