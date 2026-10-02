@@ -12,7 +12,7 @@ from aqt.overview import Overview
 from aqt.qt import QAction
 from aqt.reviewer import Reviewer
 
-from . import config_ops, grading, health, ui
+from . import config_ops, grading, health, state, ui
 from .chat_page import deck_ids, load_config
 from .config_page import ConfigPage
 from .generate_page import GeneratePage
@@ -23,7 +23,7 @@ ADDON = __name__.split(".")[0]
 
 class State:
     def __init__(self):
-        self.enabled = False  # AI Study mode; off at every Anki start
+        self.enabled = bool(state.get("ui", "ai_study"))  # AI Study mode; as the user last left it
         self.session = None
         self.cwd = None
         self.page = None
@@ -207,6 +207,7 @@ def end_session(*_args):
 
 def set_enabled(on: bool):
     S.enabled = on
+    state.put("ui", "ai_study", on)
     if not on:
         end_session()
     if S.action is not None:

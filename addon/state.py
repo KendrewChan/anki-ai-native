@@ -1,7 +1,9 @@
-"""Facts the add-on learns about the CLIs — not user settings, so never in the config or its undo history.
+"""Facts the add-on learns about the CLIs, and UI state it remembers — not user settings, so never in the config
+or its undo history.
 
 - "models": "provider:configured" -> the real model id the CLI reported (shown instantly after a restart)
 - "last_good": provider -> last CLI version that passed the self-check (the Roll back target)
+- "ui": "ai_study" -> whether AI Study mode was ON when last switched (restored at Anki start)
 
 Stored in user_files/state.json, which Anki keeps when the add-on is updated. No Anki imports.
 """

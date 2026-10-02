@@ -2,6 +2,10 @@
 
 What changed in each version, newest first. How the add-on works today is in [docs/spec.md](docs/spec.md).
 
+## v1.16 — AI Study remembers ON/OFF (2026-10-02)
+
+- The AI Study ON/OFF switch now stays as you left it when Anki restarts, instead of always starting OFF. Stored in `user_files/state.json`, so it isn't part of Settings' undo.
+
 ## v1.15 — Renamed to AI Quizzer (2026-10-02)
 
 - The repo is now **anki-ai-quizzer** and the add-on shows as **AI Quizzer** in Anki's add-on list. The study mode keeps its name (AI Study), and the package stays `anki_ai`, so existing installs and settings carry over.

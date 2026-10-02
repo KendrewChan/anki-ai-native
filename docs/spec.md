@@ -44,7 +44,7 @@ Everything that doesn't import `aqt` is unit-tested with plain pytest.
 
 ## Reviewer flow (`main.py`, `ui.py`, `grading.py`)
 
-Only active while **AI Study** is ON, and only for cards whose home deck has AI Study on (per-deck setting, default on; see Deck Prompts in Settings). The ON/OFF link is on the home screen, on the deck overview and in **Tools → AI Study mode**. It is off at every Anki start. Off means the plain reviewer runs and no AI process starts; turning it off kills the session. The flow is display-only, through `gui_hooks.card_will_show`: nothing is written to the card except the Missed section.
+Only active while **AI Study** is ON, and only for cards whose home deck has AI Study on (per-deck setting, default on; see Deck Prompts in Settings). The ON/OFF link is on the home screen, on the deck overview and in **Tools → AI Study mode**. It stays as the user last left it across Anki restarts (`state.json` → `ui.ai_study`; off on first install). Off means the plain reviewer runs and no AI process starts; turning it off kills the session. The flow is display-only, through `gui_hooks.card_will_show`: nothing is written to the card except the Missed section.
 
 **Question side**
 - Sharp questions are on by default and set per deck (see Deck Prompts in Settings). When on for the card's home deck, an ask request returns `{"questions": [1–4]}`, one per distinct point the card bundles. Otherwise the card's own question is used.
