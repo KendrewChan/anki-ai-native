@@ -39,7 +39,7 @@ Next to ⚙ Settings. Optionally pick a **reference** — a file or folder on yo
 
 ## When something breaks
 
-Open **⚙ Settings**: it checks your AI CLI on open. If something's wrong you get a plain explanation with buttons — **Update**, **Roll back** to the last version that worked, **Log in**, **Allow more time**, switch provider, or **Copy error report** to send to the author. For problems in the add-on itself it can offer **Try AI repair**: another AI proposes a small fix, you approve it, and it's checked and undone automatically if it doesn't work (**Revert AI repair** undoes it later).
+Open **⚙ Settings**: it checks your AI CLI on open. If something's wrong you get a plain explanation with buttons — **Update**, **Roll back** to the last version that worked, **Log in**, **Allow more time**, switch provider, or **Copy error report** to send to the author.
 
 ## Notes
 

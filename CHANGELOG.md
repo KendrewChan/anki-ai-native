@@ -2,6 +2,13 @@
 
 What changed in each version, newest first. How the add-on works today is in [docs/spec.md](docs/spec.md).
 
+## v1.11 — Simpler, safer (2026-10-02)
+
+- **Removed Try AI repair.** It let an AI edit the add-on's own code, and nothing but the prompt stopped it from dropping the isolation flags. Update, Roll back, switch provider and Copy error report remain.
+- Learned facts (real model names, last working CLI version) moved out of the settings into `user_files/state.json`: undo no longer rewinds them, and drawing Settings no longer saves the config. Old copies in the settings are dropped on the next change.
+- `ChatPage` base class shared by Settings and Generate/Update (page lifecycle, Back, chat box, drafts); the fix buttons talk to Settings through a small public interface.
+- Removed the migration for the pre-v1.5 single `model` setting.
+
 ## v1.10.1 — Cleanup (2026-10-02)
 
 - Fix: the Codex self-check now also starts the exact `--json` study command, so a CLI that rejects it can no longer pass Settings while studying fails. AI repair verifies with the same check.

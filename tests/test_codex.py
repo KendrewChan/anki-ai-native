@@ -143,11 +143,13 @@ def test_model_is_validated_against_the_provider_set_in_the_same_change():
     assert new["models"]["codex"] == "" and any("not an OpenAI model id" in line for line in log)
 
 
-def test_legacy_single_model_key_migrates_to_active_provider():
-    legacy = {"provider": "codex", "model": "gpt-5.5", "custom": []}
-    assert session.model_for(legacy) == "gpt-5.5" and session.model_for(legacy, "claude") == ""
-    new, _ = apply([{"add_custom": "x"}], cfg=legacy)
-    assert "model" not in new and new["models"] == {"claude": "", "codex": "gpt-5.5"}
+def test_model_per_provider_and_old_cache_keys_dropped():
+    cfg = {"provider": "codex", "models": {"codex": "gpt-5.5"}, "custom": [],
+           "resolved_models": {"codex:": "x"}, "last_good": {"codex": "1.0.0"}}
+    assert session.model_for(cfg) == "gpt-5.5" and session.model_for(cfg, "claude") == ""
+    new, _ = apply([{"add_custom": "x"}], cfg=cfg)
+    assert new["models"] == {"claude": "", "codex": "gpt-5.5"}
+    assert "resolved_models" not in new and "last_good" not in new  # learned facts live in state.py now
     assert session.model_for({"custom": []}) == ""  # nothing set: provider default
 
 

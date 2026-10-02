@@ -13,7 +13,8 @@ from aqt.qt import QAction
 from aqt.reviewer import Reviewer
 
 from . import config_ops, grading, health, ui
-from .config_page import ConfigPage, deck_ids, load_config
+from .chat_page import deck_ids, load_config
+from .config_page import ConfigPage
 from .generate_page import GeneratePage
 from .session import make_backend, provider_of
 

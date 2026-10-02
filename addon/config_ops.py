@@ -269,10 +269,11 @@ def apply_changes(cfg: dict, changes: list, history: list, is_executable=None, d
 
 
 def _normalize(cfg: dict) -> dict:
-    """Copy with per-provider models (migrates the legacy single "model" key)."""
+    """Copy with a model entry per provider. Drops learned facts older versions kept here (now in state.py)."""
     out = _copy(cfg)
     out["models"] = {p: model_for(cfg, p) for p in PROVIDERS}
-    out.pop("model", None)
+    for key in ("resolved_models", "last_good"):
+        out.pop(key, None)
     return out
 
 

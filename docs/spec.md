@@ -15,14 +15,16 @@ Run an AI study loop inside the Anki desktop reviewer: the AI turns each card in
 | `__init__.py` | Loads `main.py` only inside Anki | guarded |
 | `main.py` | Hooks, AI Study toggle, reviewer glue | yes |
 | `ui.py` | Reviewer HTML/JS | no |
+| `chat_page.py` | `ChatPage` base for both pages (state enter/leave, Back, chat box, bridge routing); `load_config`, `deck_ids` | yes |
 | `config_page.py`, `generate_page.py` | ⚙ Settings and ✨ Generate/Update Cards pages | yes |
 | `session.py` | Provider CLIs: find, isolate, run, parse; login; model lookup | no |
 | `grading.py` | Tutor prompts, reply parsing, Missed HTML | no |
 | `config_ops.py` | Settings chat prompt, validated config changes, toggles | no |
 | `generate_ops.py` | Generate prompt, reference reading, reply validation | no |
 | `generate_col.py` | AI-GEN staging ops on a `Collection` passed in | no |
-| `health.py`, `repair.py` | Self-check + error classification; AI repair validate/apply/restore | no |
-| `fixes.py` | Fix buttons (update, roll back, log in, repair) | yes |
+| `health.py` | Self-check, error classification, reviewer failure policy, update / rollback | no |
+| `fixes.py` | Fix buttons on Settings replies; talks to the page only through `cfg`, `provider`, `apply`, `login`, `say`, `refresh` | yes |
+| `state.py` | What the add-on learns about the CLIs: real model names, `last_good` versions. `user_files/state.json`, kept by Anki across updates; never in the config or its undo history | no |
 | `config.json` | Shipped defaults (the user's settings live in the gitignored `meta.json`) | — |
 
 Everything that doesn't import `aqt` is unit-tested with plain pytest.
@@ -37,7 +39,7 @@ Everything that doesn't import `aqt` is unit-tested with plain pytest.
   - Claude: `--safe-mode --setting-sources "" --strict-mcp-config --tools "" --disable-slash-commands --no-session-persistence`. `--bare` is not usable: it can't use subscription login.
   - Codex: `--ephemeral --ignore-user-config --ignore-rules --skip-git-repo-check -s read-only --disable shell_tool|apps|browser_use|computer_use|plugins -c web_search="disabled"`.
 - API: `request(card_id, prompt, parse, timeout, callback)` — callbacks on the main thread; the "ask" and "grade" prompts come from `grading.py`. One request in flight, later ones queue. Replies are tagged with their card id; replies for a card no longer shown are dropped.
-- **Models**: `models: {claude, codex}`; `""` = the CLI's default. Settings always shows the real model id, read from the CLI's own output (Claude's stream-json `init` event, Codex's stderr `model:` header), cached in `resolved_models`. A legacy single `model` key is read as the active provider's model and migrated on the next save.
+- **Models**: `models: {claude, codex}`; `""` = the CLI's default. Settings always shows the real model id, read from the CLI's own output (Claude's stream-json `init` event, Codex's stderr `model:` header), saved by `session.remember_model` into `state.py` the moment a probe or real call reports it (rendering never writes). The two keys older versions kept in the config (`resolved_models`, `last_good`) are dropped on the next settings change.
 - **Login**: Claude `claude auth status|login|logout`; Codex `codex login status` / `codex login` / `codex logout`.
 
 ## Reviewer flow (`main.py`, `ui.py`, `grading.py`)
@@ -112,7 +114,7 @@ A main-window state (`aiStudyGenerate`). It works whether AI Study is on or off,
 - **Show Original / Show Update** on UPDATE cards: client-side, and the choice survives redraws.
 - **Undo**: every action, including each AI change batch, is one undo step (`add_custom_undo_entry` + `merge_undo_entries` in a `CollectionOp`). Actions use a few batched ops, because Anki keeps only ~30 undo steps. If a merge still fails, the saved changes are reported instead of an error.
 
-## Errors, self-check, repair (`health.py`, `fixes.py`, `repair.py`)
+## Errors, self-check, fixes (`health.py`, `fixes.py`)
 
 A failure never blocks review: Space always works.
 
@@ -128,8 +130,7 @@ A failure never blocks review: Space always works.
 - **Self-check** (`health.self_check`):
   - Runs when Settings opens and after update or rollback.
   - `session.startup_check` starts the real study command and stops before any answer, so a pass proves the CLI accepts every add-on flag. Claude: until its `init` event names the model. Codex: the command without `--json` until its header names the model, then the exact `--json` command until its first event.
-  - The repair flow runs the same check against the patched code.
-  - A pass records `last_good[provider] = version`.
+  - A pass records `last_good[provider] = version` in `state.py` (the Roll back target).
 - **Diagnosis**:
   - Reviewer errors are stored in `health.LAST_ERROR`.
   - "Usage limit" is decided by one rule, `session.error_kind`, which both the reviewer and Settings use.
@@ -141,12 +142,6 @@ A failure never blocks review: Space always works.
     - **Allow more time** (×2, cap 600 s)
     - **Use <other provider>**
     - **Copy error report**
-- **Try AI repair**:
-  - Offered for incompatible/other failures, and it runs on a *working* provider.
-  - The AI returns find/replace edits to `session.py` / `health.py` only. `repair.validate` requires each `old` text to occur exactly once and allows no no-ops.
-  - **Apply** backs up to `.repair_backup/<ts>`, then self-checks the patched code. If the self-check fails, the backup is restored automatically.
-  - **Revert AI repair** stays available while a backup exists. Restart Anki to run the repaired code.
-
 ## Testing
 
 - `pytest tests`: pure logic, plus `session.py` against `fake_claude.py` / `fake_codex.py`, which give no real AI calls and no plan usage. Covers lifecycle, queueing, stale drop, crash restart, timeout and bad JSON.

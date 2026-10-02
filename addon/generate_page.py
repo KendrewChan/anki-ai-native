@@ -2,7 +2,6 @@
 
 import html
 import json
-import tempfile
 from collections import deque
 
 from aqt import mw
@@ -10,11 +9,11 @@ from aqt.operations import CollectionOp
 from aqt.qt import QFileDialog
 
 from . import generate_col, generate_ops, health
-from .config_page import CSS as CONFIG_CSS, deck_ids, load_config
+from .chat_page import ChatPage, deck_ids
+from .config_page import CSS as CONFIG_CSS
 from .grading import strip_html
 from .session import make_backend, provider_of
 
-STATE = "aiStudyGenerate"
 TEMP = html.escape(generate_ops.TEMP_DECK)
 TIMEOUT_S = 300
 MAX_READ_ROUNDS = 2  # times the AI may ask to read decks before answering one message
@@ -79,18 +78,6 @@ window.aiGen = {
     if (on) this.origs.add(card.dataset.card); else this.origs.delete(card.dataset.card);
   },
 };
-document.getElementById("cmd").addEventListener("keydown", function (e) {
-  e.stopPropagation();
-  if (e.key === "Enter" && !e.isComposing) {
-    e.preventDefault();
-    const v = this.value.trim();
-    if (!v) return;
-    this.value = "";
-    pycmd("aiGen:send:" + v);
-  }
-});
-document.getElementById("cmd").addEventListener("input", function () { pycmd("aiGen:draft:" + this.value); });
-setTimeout(function () { document.getElementById("cmd").focus(); }, 0);
 </script>
 """
 
@@ -107,73 +94,55 @@ class _Result:
         self.changes, self.info = pair
 
 
-class GeneratePage:
+class GeneratePage(ChatPage):
+    STATE = "aiStudyGenerate"
+    PREFIX = "aiGen"
+
     def __init__(self, addon: str):
-        self.addon = addon
-        self.cwd = None
+        super().__init__(addon)
         self.replies = deque(maxlen=6)  # (text, "you" | "ai" | "err")
         self.history = deque(maxlen=3)  # (user message, AI reply) sent back as context
         self.ref = ""  # reference path as chosen (validated on every use)
         self.loaded = {}  # deck name -> [note dict] the AI asked to read
-        self.busy = False
-        self.draft = ""  # unsent text in the chat box, restored when the page reopens
         self._status = ""  # shown again if the page reopens while the AI is still working
         self._backend = None
         self._ref_cache = (None, None)  # (path, (info, is_bad)): folders aren't rescanned on every redraw
-        setattr(mw, f"_{STATE}State", self._enter)
-        setattr(mw, f"_{STATE}Cleanup", self._leave)
 
-    # --- state ---
+    # --- page ---
 
-    def open(self):
-        mw.moveToState(STATE)
-
-    def _enter(self, _old_state, *_args):
+    def _entered(self):
         self._ref_cache = (None, None)
-        mw.bottomWeb.hide()
-        mw.web.stdHtml(self._page_html(), context=self)
-        mw.web.set_bridge_command(self._on_bridge, self)
         self._update(self._status if self.busy else None)
 
-    def _leave(self, _new_state):
-        if not self.busy:  # an in-flight message keeps running; its reply is applied and kept for later
-            self._stop()
+    def _leave(self, new_state):
+        if not self.busy:
             self.loaded = {}  # deck contents change outside this page
-        mw.bottomWeb.show()
+        super()._leave(new_state)
 
     def _stop(self):
         if self._backend is not None:
             self._backend.close()
             self._backend = None
 
-    # --- bridge ---
-
-    def _on_bridge(self, message: str):
-        if message == "aiGen:back":
-            mw.moveToState("deckBrowser")
-        elif message == "aiGen:clearref":
+    def _on_message(self, command: str, arg: str):
+        if command == "clearref":
             self.ref = ""
             self._update(None)
-        elif message in ("aiGen:pickdir", "aiGen:pickfile"):
-            self._pick(message == "aiGen:pickdir")
-        elif message.startswith("aiGen:approve") and not self.busy:
-            ids = _ids(message[len("aiGen:approve:"):]) if message != "aiGen:approve" else None
-            self._run_op(lambda col: _Result(generate_col.approve(col, ids)), lambda _n: self._update(None))
-        elif message.startswith("aiGen:unapprove:") and not self.busy:
-            ids = _ids(message[len("aiGen:unapprove:"):])
-            self._run_op(lambda col: _Result(generate_col.approve(col, ids, ok=False)), lambda _n: self._update(None))
-        elif message == "aiGen:submit" and not self.busy:
+        elif command in ("pickdir", "pickfile"):
+            self._pick(command == "pickdir")
+        elif self.busy:  # collection changes wait until the AI's reply has been applied
+            return
+        elif command in ("approve", "unapprove"):
+            ids = _ids(arg) if arg else None  # no ids = all staged cards
+            ok = command == "approve"
+            self._run_op(lambda col: _Result(generate_col.approve(col, ids, ok=ok)), lambda _n: self._update(None))
+        elif command == "submit":
             self._run_op(lambda col: _Result(generate_col.submit(col)), self._submitted)
-        elif message.startswith("aiGen:discard") and not self.busy:
-            ids = _ids(message[len("aiGen:discard:"):]) if message != "aiGen:discard" else None
+        elif command == "discard":
+            ids = _ids(arg) if arg else None
             self._run_op(lambda col: _Result(generate_col.discard(col, ids)),
                          lambda n: self.say(f"Discarded {n} staged card{'s' if n != 1 else ''}. "
                                             "Edit → Undo brings them back."))
-        elif message.startswith("aiGen:draft:"):
-            self.draft = message[len("aiGen:draft:"):]
-        elif message.startswith("aiGen:send:") and not self.busy:
-            self.draft = ""
-            self._send(message[len("aiGen:send:"):])
 
     def _pick(self, folder: bool):
         start = str(generate_ops.desktop())
@@ -205,8 +174,8 @@ class GeneratePage:
         self._status = "Reading your decks, thinking…" if rounds else "Thinking — this can take a minute…"
         self._update(self._status)
         self._stop()  # fresh process per message: references are resent each time, a long chat would overflow
-        self.cwd = self.cwd or tempfile.mkdtemp(prefix="anki_ai_gen_")
-        self._backend = make_backend(load_config(self.addon), generate_ops.GENERATE_SYSTEM_PROMPT, self.cwd, mw.taskman.run_on_main)
+        self._backend = make_backend(self.cfg(), generate_ops.GENERATE_SYSTEM_PROMPT, self.tmpdir(),
+                                     mw.taskman.run_on_main)
         self._backend.request(0, prompt, generate_ops.parse_generate_reply, TIMEOUT_S,
                               lambda _id, result, err: self._on_reply(text, rounds, staged, decks, result, err))
 
@@ -214,7 +183,7 @@ class GeneratePage:
         self._stop()  # also when the user left meanwhile: the reply is still applied and shown on return
         if err:
             self.busy = False
-            health.LAST_ERROR[provider_of(load_config(self.addon))] = err.message
+            health.LAST_ERROR[provider_of(self.cfg())] = err.message
             self.say(f"AI error: {err.message} — open ⚙ Settings to fix it.", err=True)
             return
         rejected = []
@@ -272,7 +241,7 @@ class GeneratePage:
         self._update(None)
 
     def _update(self, status):
-        if mw.state != STATE:
+        if mw.state != self.STATE:
             return
         info, bad = self._ref_info()
         args = [self._log_html(), info, bad, self._staged_html(), status or "", self.busy]

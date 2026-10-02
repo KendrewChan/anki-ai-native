@@ -14,6 +14,8 @@ import subprocess
 import threading
 from collections import deque
 
+from . import state
+
 RETRY_PROMPT = "Your last reply was not valid JSON. Reply again with the JSON object only."
 
 # Isolation: no user/project settings, hooks, plugins, CLAUDE.md, MCP servers or tools.
@@ -113,12 +115,7 @@ def build_codex_command(codex_path: str, model: str, cwd: str) -> list:
 
 def model_for(cfg: dict, provider: str = None) -> str:
     """The provider's own model ("" = its default). Each provider remembers its model in cfg["models"]."""
-    active = provider_of(cfg)
-    provider = provider or active
-    models = cfg.get("models")
-    if isinstance(models, dict) and provider in models:
-        return models[provider] or ""
-    return (cfg.get("model") or "") if provider == active else ""  # legacy single "model" key
+    return (cfg.get("models") or {}).get(provider or provider_of(cfg)) or ""
 
 
 def make_backend(cfg: dict, system_prompt: str, cwd: str, dispatch):
@@ -406,16 +403,16 @@ def auth_command(provider: str, path: str, action: str) -> list:
 
 # --- actual model names ("sonnet" / provider default -> the real model id) ---
 
-_resolved = {}  # (provider, configured model) -> actual model id; filled by probes and by real calls
 CODEX_MODEL_LINE = re.compile(r"^model:\s*(\S+)", re.M)
 
 
 def remember_model(provider: str, configured: str, actual: str):
-    _resolved[(provider, configured or "")] = actual
+    """Saved when a probe or a real call learns it, so Settings shows it instantly, even after a restart."""
+    state.put("models", f"{provider}:{configured or ''}", actual)
 
 
 def resolved_model(provider: str, configured: str):
-    return _resolved.get((provider, configured or ""))
+    return state.get("models", f"{provider}:{configured or ''}")
 
 
 def probe_model(provider: str, path: str, configured: str, cwd: str, timeout: float = 30) -> str:

@@ -1,6 +1,6 @@
 ---
 name: anki-update-addon
-description: Use when changing, fixing, extending, testing, packaging, or releasing the "AI Study" Anki add-on in this repo (anki_ai, AI study mode in the Anki reviewer, Claude Code / Codex provider, settings page, deck prompts, Generate/Update Cards, self-check/repair) — any edit under addon/ or a request to "update the anki plugin/add-on".
+description: Use when changing, fixing, extending, testing, packaging, or releasing the "AI Study" Anki add-on in this repo (anki_ai, AI study mode in the Anki reviewer, Claude Code / Codex provider, settings page, deck prompts, Generate/Update Cards, self-check/fixes) — any edit under addon/ or a request to "update the anki plugin/add-on".
 ---
 
 # Anki Update Add-on
@@ -16,14 +16,14 @@ This repo is the add-on. For development, `addon/` is **symlinked** into Anki as
 | `docs/spec.md` | How it works **now** — read first; edit the relevant section in place (never append history) |
 | `CHANGELOG.md` | What changed per version, newest first |
 | `addon/__init__.py` | Guards `from aqt import mw` so modules import outside Anki |
-| `addon/main.py`, `ui.py`, `config_page.py`, `generate_page.py` | Anki/Qt-facing: hooks, reviewer UI, ⚙ Settings page, ✨ Generate/Update Cards page |
+| `addon/main.py`, `ui.py`, `chat_page.py`, `config_page.py`, `generate_page.py` | Anki/Qt-facing: hooks, reviewer UI, shared chat-page base, ⚙ Settings, ✨ Generate/Update Cards |
 | `addon/session.py` | Long-running `claude` (stream-json) / stateless `codex exec` provider sessions |
 | `addon/grading.py`, `config_ops.py`, `generate_ops.py` | Prompt building, grading, plain-English settings ops, Generate planning (no Anki imports) |
 | `addon/generate_col.py` | Generate collection ops on the AI-GEN staging deck (takes a `Collection`, no aqt) |
-| `addon/health.py`, `fixes.py`, `repair.py` | CLI version/self-check/update/rollback, fix buttons, opt-in AI repair |
+| `addon/health.py`, `fixes.py`, `state.py` | CLI version/self-check/update/rollback, fix buttons, learned facts (`user_files/state.json`) |
 | `addon/config.json` | Shipped defaults. `addon/meta.json` = **user's live settings** (gitignored) |
 | `tests/` | pytest; `fake_claude.py` / `fake_codex.py` stand in for real CLIs |
-| `scripts/package.py` | Builds `dist/anki_ai.ankiaddon` (skips meta.json, caches, `.repair_backup`) |
+| `scripts/package.py` | Builds `dist/anki_ai.ankiaddon` (skips meta.json, caches, `user_files/`) |
 
 ## Workflow
 
@@ -64,5 +64,5 @@ This repo is the add-on. For development, `addon/` is **symlinked** into Anki as
 | Guessing hook/method names from docs of another Anki version | Grep the installed `.pyc` (step 2) |
 | Hard-coding model name lists | Models come live from the CLI (dropdown); don't maintain a list |
 | Claiming "works in Anki" after tests pass | Tests use fake CLIs. Say it's unverified in Anki until the user restarts and confirms |
-| Committing `dist/`, `meta.json`, `.repair_backup/` | All gitignored; check `git status` before committing |
+| Committing `dist/`, `meta.json`, `user_files/` | All gitignored; check `git status` before committing |
 | Personal info in a commit (real deck names, `/Users/<name>` paths) | Use generic examples; the repo is public |

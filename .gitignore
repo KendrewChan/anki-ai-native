@@ -4,5 +4,5 @@ __pycache__/
 
 # user settings Anki writes into the add-on folder; build output
 addon/meta.json
-addon/.repair_backup/
+addon/user_files/
 dist/

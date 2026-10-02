@@ -1,12 +1,11 @@
 import os
-import shutil
 import sys
 
 import pytest
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-from addon import health, repair, session  # noqa: E402
+from addon import health, session, state  # noqa: E402
 
 HERE = os.path.dirname(__file__)
 
@@ -92,61 +91,6 @@ def test_error_report_mentions_provider_and_error():
     assert "codex 0.153.0" in r and "unexpected argument" in r and "self-check: fail" in r
 
 
-# --- repair ---
-
-@pytest.fixture
-def addon_copy(tmp_path):
-    root = tmp_path / "addon"
-    shutil.copytree(os.path.join(HERE, "..", "addon"), root, ignore=shutil.ignore_patterns("__pycache__", "meta.json"))
-    return str(root)
-
-
-def test_parse_repair():
-    r = repair.parse_repair('{"summary":" s ","edits":[{"file":"session.py","old":"a","new":"b"},"junk"]}')
-    assert r == {"summary": "s", "edits": [{"file": "session.py", "old": "a", "new": "b"}]}
-
-
-@pytest.mark.parametrize("edit,msg", [
-    ({"file": "main.py", "old": "x", "new": "y"}, "outside the allowed files"),
-    ({"file": "../session.py", "old": "x", "new": "y"}, "outside the allowed files"),
-    ({"file": "session.py", "old": "not in the file at all", "new": "y"}, "found 0 times"),
-    ({"file": "session.py", "old": "import", "new": "y"}, "expected once"),
-    ({"file": "session.py", "old": "--ephemeral", "new": "--ephemeral"}, "no-op"),
-])
-def test_validate_rejects_unsafe_or_ambiguous_edits(addon_copy, edit, msg):
-    with pytest.raises(ValueError, match=msg):
-        repair.validate([edit], addon_copy)
-
-
-def test_validate_rejects_empty_proposal(addon_copy):
-    with pytest.raises(ValueError, match="no changes"):
-        repair.validate([], addon_copy)
-
-
-def test_apply_backs_up_and_revert_restores(addon_copy, tmp_path):
-    path = os.path.join(addon_copy, "session.py")
-    original = open(path).read()
-    edit = {"file": "session.py", "old": '"--ephemeral",', "new": '"--ephemeral-v2",'}
-    backup = repair.apply([edit], addon_copy)
-    assert '"--ephemeral-v2",' in open(path).read()
-    assert repair.latest_backup(addon_copy) == backup
-    repair.revert(backup, addon_copy)
-    assert open(path).read() == original and repair.latest_backup(addon_copy) is None
-
-
-def test_repair_prompt_includes_error_help_and_source():
-    p = repair.repair_prompt("unexpected argument '--disable'", "codex", "0.153.0", "Usage: codex exec ...")
-    assert "unexpected argument" in p and "Usage: codex exec" in p and "=== session.py ===" in p
-    assert "never just delete it" in repair.REPAIR_SYSTEM_PROMPT
-
-
-def test_load_patched_session_runs_code_from_disk(addon_copy, monkeypatch):
-    edit = {"file": "session.py", "old": 'PROVIDER_LABELS = {', "new": 'PATCHED_MARKER = True\nPROVIDER_LABELS = {'}
-    repair.apply([edit], addon_copy)
-    mod = repair.load_patched_session(addon_copy)
-    assert mod.PATCHED_MARKER is True and callable(mod.probe_model)
-
-
 def test_self_check_catches_codex_rejecting_json(tmp_path):
     """The model probe runs without --json; the self-check must still start the exact --json study command."""
     bad = _exe(tmp_path, "codex", 'sys.stdin.read()\n'
@@ -177,3 +121,28 @@ def test_study_failure_policy():
     assert f == 2 and off == "AI unavailable: again" and "AI off until you reopen" in text
     assert health.study_failure("limit", "quota", 0, None)[1] == "Usage limit: quota"
     assert health.study_failure("limit", "quota", 0, "AI unavailable: x")[1] == "AI unavailable: x"  # first reason kept
+
+
+def test_state_persists_and_skips_unchanged_writes(tmp_path):
+    state.put("last_good", "codex", "1.2.3")
+    path = state.PATH
+    mtime = os.path.getmtime(path)
+    state.put("last_good", "codex", "1.2.3")  # unchanged: no write
+    assert os.path.getmtime(path) == mtime
+    state.reset(path)  # fresh process: read back from disk
+    assert state.get("last_good", "codex") == "1.2.3" and state.get("models", "x") is None
+
+
+def test_learned_model_names_go_to_state_not_config(tmp_path):
+    session.remember_model("claude", "sonnet", "claude-sonnet-5-5")
+    assert session.resolved_model("claude", "sonnet") == "claude-sonnet-5-5"
+    assert state.get("models", "claude:sonnet") == "claude-sonnet-5-5"
+
+
+def test_damaged_state_file_starts_over(tmp_path):
+    bad = tmp_path / "bad.json"
+    bad.write_text("{not json")
+    state.reset(str(bad))
+    assert state.get("last_good", "claude") is None
+    state.put("last_good", "claude", "2.0.0")
+    assert state.get("last_good", "claude") == "2.0.0"

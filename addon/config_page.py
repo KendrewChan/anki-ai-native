@@ -3,49 +3,21 @@
 import html
 import json
 import subprocess
-import tempfile
 import threading
-
 from collections import deque
 
 from aqt import mw
 
-from . import config_ops
+from . import chat_page, config_ops
+from .chat_page import ChatPage, deck_ids
 from .fixes import Fixer
 from .session import (PROVIDER_LABELS, auth_command, find_cli, list_models, make_backend, model_for,
                       probe_model, provider_of, read_auth_status, resolved_model)
 
-STATE = "aiStudyConfig"
-
-
-def load_config(addon: str) -> dict:
-    """The user's saved settings. Keys added after they were saved are missing: read them with defaults."""
-    return mw.addonManager.getConfig(addon) or {}
-
-
-def deck_ids() -> dict:
-    """Full deck name -> deck id (str), the shape config_ops expects."""
-    return {d.name: str(d.id) for d in mw.col.decks.all_names_and_ids()}
-
-CSS = """
+CSS = chat_page.CSS + """
 <style>
-#cfg { max-width: 52em; margin: 1.2em auto; padding: 0 1em; text-align: left; }
-#cfg a.back { cursor: pointer; opacity: 0.7; font-size: 0.9em; }
-#cfg h2 { margin: 0.4em 0 0.6em; }
-#log { max-height: 34vh; overflow-y: auto; font-size: 0.92em; margin-bottom: 0.5em; }
-#log .you { margin-top: 0.6em; font-weight: 600; }
-#log .ai { margin: 0.2em 0 0 1em; }
-#log .chg { margin-left: 1em; font-family: ui-monospace, Menlo, monospace; font-size: 0.9em; }
-#log .err { margin-left: 1em; color: #d33; white-space: pre-wrap; }
-#log .ai { white-space: pre-wrap; }
 #log .acts { margin: 0.3em 0 0.2em; } #log .acts button { margin: 0 0.4em 0.3em 0; color: initial; }
-#cmd { width: 100%; box-sizing: border-box; padding: 0.6em; font: inherit; border-radius: 6px;
-       border: 1px solid #8888; background: transparent; color: inherit; }
-#status { font-size: 0.85em; opacity: 0.7; min-height: 1.3em; margin: 0.3em 0 0.8em; }
-.sect h3 { margin: 1em 0 0.3em; font-size: 1em; text-transform: uppercase; letter-spacing: 0.05em; opacity: 0.7; }
-.sect table { border-collapse: collapse; } .sect td { padding: 0.15em 1.2em 0.15em 0; vertical-align: top; }
 .sect td.k .kl { opacity: 0.7; } .sect ol { margin: 0.2em 0 0 1.4em; padding: 0; }
-.sect button { margin-left: 0.6em; } .sect select { font: inherit; }
 .sect button.tog { margin-left: 0; min-width: 3.6em; } .sect button.tog.on { color: #27864a; font-weight: 600; }
 .help { position: relative; display: inline-block; width: 1.25em; height: 1.25em; line-height: 1.2em; margin-left: 0.4em;
         border: 1px solid #8889; border-radius: 50%; font-size: 0.75em; font-weight: 600; text-align: center;
@@ -102,129 +74,39 @@ window.aiCfg = {
     try { sel.showPicker(); } catch (err) { sel.focus(); }
   },
 };
-document.getElementById("cmd").addEventListener("keydown", function (e) {
-  e.stopPropagation();
-  if (e.key === "Enter" && !e.isComposing) {
-    e.preventDefault();
-    const v = this.value.trim();
-    if (!v) return;
-    this.value = "";
-    pycmd("aiCfg:send:" + v);
-  }
-});
-document.getElementById("cmd").addEventListener("input", function () { pycmd("aiCfg:draft:" + this.value); });
-setTimeout(function () { document.getElementById("cmd").focus(); }, 0);
 </script>
 """
 
 
-class ConfigPage:
+class ConfigPage(ChatPage):
+    STATE = "aiStudyConfig"
+    PREFIX = "aiCfg"
+
     def __init__(self, addon: str, on_config_changed):
-        self.addon = addon
+        super().__init__(addon)
         self.on_config_changed = on_config_changed
         self.session = None
-        self.cwd = None
         self.replies = deque(maxlen=3)  # (text, is_error, actions): only the latest replies are shown
         self._actions = {}  # button id -> callable, for buttons inside replies
-        self.version = {}  # provider -> CLI version string
+        self._next_id = 0  # for _actions keys
         self.fixer = Fixer(self)
         self.history = []  # config snapshots for undo
         self.auth = "checking…"
         self.logged_in = None
-        self.busy = False
-        self.draft = ""  # unsent text in the chat box, restored when the page reopens
         self.selected = None  # full deck name chosen in the Deck Prompts tree
         self._probing = set()  # (provider, model) lookups in flight
-        setattr(mw, f"_{STATE}State", self._enter)
-        setattr(mw, f"_{STATE}Cleanup", self._leave)
 
-    # --- state ---
+    # --- the interface fixes.Fixer uses (cfg() comes from ChatPage) ---
 
-    def open(self):
-        mw.moveToState(STATE)
+    def provider(self, cfg=None) -> tuple:
+        """(provider, CLI path)."""
+        cfg = cfg or self.cfg()
+        provider = provider_of(cfg)
+        return provider, find_cli(provider, cfg.get(f"{provider}_path", ""))
 
-    def _enter(self, _old_state, *_args):
-        mw.bottomWeb.hide()
-        mw.web.stdHtml(self._page_html(), context=self)
-        mw.web.set_bridge_command(self._on_bridge, self)
-        self._refresh_auth()
-        self.fixer.check_on_open()
-        if self.busy:  # a message sent before leaving is still being answered
-            self._update("Thinking…")
-
-    def _leave(self, _new_state):
-        if not self.busy:  # an in-flight message keeps running; its reply is kept for when the page reopens
-            self._drop_session()
-        mw.bottomWeb.show()
-
-    # --- bridge ---
-
-    def _on_bridge(self, message: str):
-        if message == "aiCfg:back":
-            mw.moveToState("deckBrowser")
-        elif message.startswith("aiCfg:select:"):
-            self.selected = message[len("aiCfg:select:"):]
-            self._update(None)
-        elif message == "aiCfg:models":
-            self._load_models()
-        elif message.startswith("aiCfg:model:"):
-            self._apply([{"set": {"model": message[len("aiCfg:model:"):]}}])
-            self._update(None)
-        elif message.startswith("aiCfg:toggle:"):
-            key = message[len("aiCfg:toggle:"):]
-            if key in config_ops.TOGGLES:
-                self._apply([config_ops.toggle_change(self._cfg(), key)])
-                self._update(None)
-        elif message.startswith("aiCfg:provider:"):
-            self._apply([{"set": {"provider": message[len("aiCfg:provider:"):]}}])
-            self._update(None)
-        elif message.startswith("aiCfg:act:"):
-            fn = self._actions.pop(message[len("aiCfg:act:"):], None)
-            if fn:
-                fn()
-        elif message == "aiCfg:update":
-            self.fixer.update()
-        elif message == "aiCfg:revert":
-            self.fixer.revert_repair()
-        elif message == "aiCfg:login":
-            self._run_auth("login")
-        elif message.startswith("aiCfg:draft:"):
-            self.draft = message[len("aiCfg:draft:"):]
-        elif message.startswith("aiCfg:send:") and not self.busy:
-            self.draft = ""
-            self._send(message[len("aiCfg:send:"):])
-
-    def _send(self, text: str):
-        cfg = self._cfg()
-        self.busy = True
-        self._update("Thinking…")
-        provider, _path = self._provider(cfg)
-        in_use = resolved_model(provider, model_for(cfg)) or (cfg.get("resolved_models") or {}).get(
-            f"{provider}:{model_for(cfg)}")
-        prompt = config_ops.config_prompt(cfg, self.auth, text, deck_ids(), self.selected, in_use)
-        self._session(cfg).request(0, prompt, config_ops.parse_config_reply, 90, self._on_reply)
-
-    def _on_reply(self, _id, result, err):
-        self.busy = False
-        if err:
-            self.say(f"AI error: {err.message}", err=True)
-            self._update("")
-            if mw.state != STATE:
-                self._drop_session()
-            return
-        rejected = []
-        actions = self._apply(result["changes"], rejected)
-        reply = " ".join(filter(None, [result["reply"], *rejected])) or "Done."
-        self.say(reply, err=bool(rejected))
-        for action in actions:
-            self._run_auth(action)
-        self._update("")
-        if mw.state != STATE:  # answered after the user left: don't keep the CLI running
-            self._drop_session()
-
-    def _apply(self, changes, rejected=None) -> list:
+    def apply(self, changes, rejected=None) -> list:
         """Validate + save changes; rejected ones go into `rejected`. Returns requested auth actions."""
-        cfg = self._cfg()
+        cfg = self.cfg()
         decks = deck_ids()
         new, log, auth = config_ops.apply_changes(cfg, changes, self.history, decks=decks)
         new = config_ops.prune_deck_prompts(new, set(decks.values()))
@@ -233,32 +115,89 @@ class ConfigPage:
         if new != cfg:
             mw.addonManager.writeConfig(self.addon, new)
             self.on_config_changed()
-            self._drop_session()
+            self._stop()
             if provider_of(new) != provider_of(cfg):
                 self._refresh_auth()
         return auth
 
-    # --- claude ---
+    def login(self):
+        self._run_auth("login")
+
+    def refresh(self):
+        self._update(None)
+
+    # --- page ---
+
+    def _entered(self):
+        self._refresh_auth()
+        self.fixer.check_on_open()
+        if self.busy:  # a message sent before leaving is still being answered
+            self._update("Thinking…")
+
+    def _on_message(self, command: str, arg: str):
+        if command == "select":
+            self.selected = arg
+            self._update(None)
+        elif command == "models":
+            self._load_models()
+        elif command == "model":
+            self.apply([{"set": {"model": arg}}])
+            self._update(None)
+        elif command == "toggle" and arg in config_ops.TOGGLES:
+            self.apply([config_ops.toggle_change(self.cfg(), arg)])
+            self._update(None)
+        elif command == "provider":
+            self.apply([{"set": {"provider": arg}}])
+            self._update(None)
+        elif command == "act":
+            fn = self._actions.pop(arg, None)
+            if fn:
+                fn()
+        elif command == "update":
+            self.fixer.update()
+        elif command == "login":
+            self.login()
+
+    def _send(self, text: str):
+        cfg = self.cfg()
+        self.busy = True
+        self._update("Thinking…")
+        provider, _path = self.provider(cfg)
+        in_use = resolved_model(provider, model_for(cfg))
+        prompt = config_ops.config_prompt(cfg, self.auth, text, deck_ids(), self.selected, in_use)
+        self._session(cfg).request(0, prompt, config_ops.parse_config_reply, 90, self._on_reply)
+
+    def _on_reply(self, _id, result, err):
+        self.busy = False
+        if err:
+            self.say(f"AI error: {err.message}", err=True)
+            self._update("")
+            if mw.state != self.STATE:
+                self._stop()
+            return
+        rejected = []
+        actions = self.apply(result["changes"], rejected)
+        reply = " ".join(filter(None, [result["reply"], *rejected])) or "Done."
+        self.say(reply, err=bool(rejected))
+        for action in actions:
+            self._run_auth(action)
+        self._update("")
+        if mw.state != self.STATE:  # answered after the user left: don't keep the CLI running
+            self._stop()
 
     def _session(self, cfg):
         if self.session is None:
-            self.cwd = self.cwd or tempfile.mkdtemp(prefix="anki_ai_cfg_")
-            self.session = make_backend(cfg, config_ops.CONFIG_SYSTEM_PROMPT, self.cwd, mw.taskman.run_on_main)
+            self.session = make_backend(cfg, config_ops.CONFIG_SYSTEM_PROMPT, self.tmpdir(), mw.taskman.run_on_main)
         return self.session
 
-    def _drop_session(self):
-        """Config changed (provider, model, path): the next message starts a fresh backend."""
+    def _stop(self):
+        """Config changed (provider, model, path) or page left: the next message starts a fresh backend."""
         if self.session is not None:
             self.session.close()
             self.session = None
 
-    def _provider(self, cfg=None) -> tuple:
-        cfg = cfg or self._cfg()
-        provider = provider_of(cfg)
-        return provider, find_cli(provider, cfg.get(f"{provider}_path", ""))
-
     def _refresh_auth(self):
-        provider, path = self._provider()
+        provider, path = self.provider()
 
         def work():
             try:
@@ -271,10 +210,10 @@ class ConfigPage:
 
     def _load_models(self):
         """Fill the Model dropdown with what the CLI offers right now (current model stays first)."""
-        cfg = self._cfg()
-        provider, path = self._provider(cfg)
+        cfg = self.cfg()
+        provider, path = self.provider(cfg)
         configured = model_for(cfg)
-        cwd = self.cwd = self.cwd or tempfile.mkdtemp(prefix="anki_ai_cfg_")
+        cwd = self.tmpdir()
 
         def work():
             error = None
@@ -293,28 +232,23 @@ class ConfigPage:
         threading.Thread(target=work, daemon=True).start()
 
     def _model_name(self, provider: str, path: str, configured: str) -> str:
-        """The real model id; looks it up in the background the first time."""
-        saved = self._cfg().get("resolved_models") or {}
-        actual = resolved_model(provider, configured) or saved.get(f"{provider}:{configured}")
+        """The real model id (saved by session.py whenever a CLI reports it); looked up in the background once."""
+        actual = resolved_model(provider, configured)
         if actual:
-            if saved.get(f"{provider}:{configured}") != actual:
-                self._save_resolved(provider, configured, actual)  # a real call reported a newer name
             return actual
         key = (provider, configured)
         if key not in self._probing:
             self._probing.add(key)
-            cwd = self.cwd = self.cwd or tempfile.mkdtemp(prefix="anki_ai_cfg_")
+            cwd = self.tmpdir()
 
             def work():
                 try:
-                    actual = probe_model(provider, path, configured, cwd)
+                    probe_model(provider, path, configured, cwd)
                 except Exception:  # stays "checking…"; the next real call fills it in
-                    actual = None
+                    pass
 
                 def done():
                     self._probing.discard(key)
-                    if actual:
-                        self._save_resolved(provider, configured, actual)
                     self._update(None)
 
                 mw.taskman.run_on_main(done)
@@ -323,20 +257,14 @@ class ConfigPage:
             return "checking…"
         return configured or "checking…"
 
-    def _save_resolved(self, provider: str, configured: str, actual: str):
-        """Persist the model name so it shows immediately after a restart (not a user setting: no undo)."""
-        cfg = self._cfg()
-        names = dict(cfg.get("resolved_models") or {}, **{f"{provider}:{configured}": actual})
-        mw.addonManager.writeConfig(self.addon, dict(cfg, resolved_models=names))
-
     def _set_auth(self, ok, text):
         self.logged_in, self.auth = ok, text
-        if mw.state == STATE:
+        if mw.state == self.STATE:
             self._update(None)
 
     def _run_auth(self, action: str):
         """login opens the browser via Claude Code's own flow; the add-on never sees credentials."""
-        provider, path = self._provider()
+        provider, path = self.provider()
         label = PROVIDER_LABELS[provider]
         note = {"login": f"Opening your browser to sign in to {label}…",
                 "logout": f"Logging out of {label} (this also signs it out everywhere on this computer)…"}[action]
@@ -363,11 +291,8 @@ class ConfigPage:
 
     # --- rendering ---
 
-    def _cfg(self) -> dict:
-        return load_config(self.addon)
-
     def _update(self, status):
-        if mw.state != STATE:
+        if mw.state != self.STATE:
             return
         status = "" if status is None else status
         args = [self._log_html(), self._sections_html(), status, self.busy]
@@ -377,7 +302,7 @@ class ConfigPage:
         """Add a reply; `actions` = [(label, callable)] rendered as buttons under it."""
         ids = []
         for label, fn in actions:
-            self._next_id = getattr(self, "_next_id", 0) + 1
+            self._next_id += 1
             key = str(self._next_id)
             self._actions[key] = fn
             ids.append((label, key))
@@ -399,11 +324,11 @@ class ConfigPage:
         return "".join(out)
 
     def _sections_html(self) -> str:
-        cfg = self._cfg()
+        cfg = self.cfg()
         login = html.escape(self.auth)
         if self.logged_in is False:
             login += ' <button onclick="pycmd(\'aiCfg:login\')">Log in</button>'
-        provider, found = self._provider(cfg)
+        provider, found = self.provider(cfg)
         # A plain control, not the chat: if the current provider is broken, the chat can't fix it.
         options = "".join(
             f'<option value="{p}"{" selected" if p == provider else ""}>{html.escape(label)}</option>'
@@ -420,11 +345,9 @@ class ConfigPage:
                         f'onchange="pycmd(\'aiCfg:model:\' + this.value)">'
                         f'<option value="{html.escape(configured)}" selected>{current}</option></select>')
         rows.insert(2, ("Model", model_select))
-        version = self.version.get(provider, "checking…")
+        version = self.fixer.version.get(provider, "checking…")
         rows.insert(3, ("Version", html.escape(version)
                         + ' <button onclick="pycmd(\'aiCfg:update\')">Update</button>'))
-        if self.fixer.repair_applied():
-            rows.append(("AI repair", 'applied <button onclick="pycmd(\'aiCfg:revert\')">Revert</button>'))
         path = cfg.get(f"{provider}_path") or ""
         rows.append((f"{PROVIDER_LABELS[provider]} path",
                      html.escape(path if path and path != "auto" else f"auto → {found}")))
