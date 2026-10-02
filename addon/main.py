@@ -104,7 +104,7 @@ def on_error(err) -> str:
 
 def on_card_will_show(text: str, card, kind: str) -> str:
     if kind == "reviewQuestion" and active(card):
-        return ui.question_html(text, bool(rewrite_enabled(card)))
+        return ui.question_html(text, rewrite_enabled(card))
     if kind == "reviewAnswer" and card.id in S.verdicts:
         return ui.verdict_html(*S.verdicts[card.id], S.edit_status.get(card.id)) + text
     return text
@@ -123,7 +123,8 @@ def on_show_question(card):
     mode = rewrite_enabled(card)
     if not mode:
         return
-    session().request(card.id, grading.ask_prompt(q, rules, sharp=mode == "sharp"), grading.parse_questions,
+    parse = grading.parse_questions if mode == "sharp" else grading.parse_added_questions
+    session().request(card.id, grading.ask_prompt(q, rules, sharp=mode == "sharp"), parse,
                       c.get("ask_timeout_s", 30), on_asked)
 
 

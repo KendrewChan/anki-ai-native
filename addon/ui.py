@@ -129,7 +129,7 @@ JS = """
       if (submitted) return;
       if (orig && showOriginal) orig.open = true;
       list.innerHTML = "";
-      qs.forEach(addItem);
+      if (qs.length) qs.forEach(addItem); else addItem(null);  // nothing to add: one box for the card's own question
       sizeBoxes();
       boxes()[0].focus();
       if (window.MathJax && MathJax.typesetPromise)  // Anki typesets the card once; these arrived later
@@ -162,15 +162,18 @@ JS = """
 HINT = "Enter: next box / submit · Shift+Enter: new line · Enter with all boxes empty: just show the answer"
 
 
-def question_html(original: str, rewrite: bool) -> str:
-    """Wrap Anki's rendered question. rewrite=True starts with no answer box: setQuestions adds one per question it gets.
-    rewrite=False (cloze, or no question step) shows the original as the question with its box ready."""
-    if rewrite:
+def question_html(original: str, mode: str) -> str:
+    """Wrap Anki's rendered question. mode (main.rewrite_enabled):
+    "sharp" — original folded under Show original; no box until setQuestions adds one per rewritten question.
+    "keep"  — original shown as the question; no box until setQuestions adds what the deck prompt asks for (or one box).
+    ""      — original shown as the question with its box ready (cloze, or no question step)."""
+    loading = '<div class="ai-item"><div class="ai-q loading">Preparing the questions…</div></div>'
+    if mode == "sharp":
         orig = f'<details id="ai-orig"><summary>Show original</summary>{original}</details>'
-        item = '<div class="ai-item"><div class="ai-q loading">Preparing the questions…</div></div>'
+        item = loading
     else:
         orig = f'<div id="ai-orig-plain">{original}</div>'
-        item = f'<div class="ai-item"><textarea class="ai-ans" placeholder="{HINT}"></textarea></div>'
+        item = loading if mode else f'<div class="ai-item"><textarea class="ai-ans" placeholder="{HINT}"></textarea></div>'
     js = JS.replace("__HINT__", json.dumps(HINT))
     return f'{CSS}<div id="ai-study">{orig}<div id="ai-items">{item}</div><div id="ai-status"></div></div>{js}'
 

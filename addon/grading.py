@@ -80,8 +80,9 @@ def deck_rules_block(deck_rules: list) -> str:
 def ask_prompt(question: str, deck_rules: list = (), sharp: bool = True) -> str:
     """Front only: rewritten questions must come from the card's question, never its answer.
     sharp=False: Rewrite question is off for the deck but its deck rules still shape the question side."""
-    keep = ("" if sharp else "\n\nRewrite question is off for this deck: return the card's question unchanged as your one "
-            "question, unless the deck rules ask for something else (sections, more questions, other wording).")
+    keep = ("" if sharp else "\n\nRewrite question is off for this deck: the card's question is shown as written above your "
+            "questions, so never repeat or rephrase it, and show_original does nothing. Return only what the deck rules ask "
+            "for on the question side (e.g. a question per section); if they ask for nothing there, return \"questions\": [].")
     return f"NEW CARD\n\nQuestion:\n{question}{keep}{deck_rules_block(deck_rules)}"
 
 
@@ -177,6 +178,15 @@ def parse_questions(text: str) -> dict:
                       "parts": [{"label": lb, "text": p, "hint": ph} for lb, p, ph in zip(labels, parts, part_hints)]})
         questions.append("\n".join([stem] + [f"{lb} {p}" for lb, p in zip(labels, parts)]).strip())
     return {"questions": questions, "items": items, "show_original": obj.get("show_original") is True}
+
+
+def parse_added_questions(text: str) -> dict:
+    """Rewrite question off: questions the deck rules add under the card's own question; none is fine (one plain box)."""
+    try:
+        return parse_questions(text)
+    except ValueError:
+        parse_json_reply(text)  # still fail on a reply that isn't JSON at all
+        return {"questions": [], "items": [], "show_original": False}
 
 
 def parse_grade(text: str) -> dict:

@@ -5,6 +5,7 @@ What changed in each version, newest first. How the add-on works today is in [do
 ## v1.28 — Quick deck prompts (2026-10-02)
 
 - Clicking a deck under Deck Settings fills the chat box with `Deck prompt for "<deck>": ` and puts the cursor at the end. Your own typed message is never overwritten. The chat box now stays pinned at the top while you scroll.
+- Decks with a deck prompt but Rewrite question off show the card's question as normal (no Show original fold). The AI adds only what the prompt asks for, such as section boxes, and never repeats the question. When the prompt asks for nothing on the question side, you get the usual single box.
 
 ## v1.27 — Clearer tutor prompt; renames (2026-10-02)
 

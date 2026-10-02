@@ -122,13 +122,13 @@ def test_grade_prompt_folds_extra_answers_into_last():
 
 
 def test_question_html_sharp_starts_without_box():
-    html = ui.question_html("<b>orig</b>", rewrite=True)
+    html = ui.question_html("<b>orig</b>", "sharp")
     assert html.index('id="ai-orig"') < html.index('class="ai-q loading"')
     assert '<textarea' not in html and "__HINT__" not in html
 
 
 def test_question_html_cloze_has_no_rewrite():
-    html = ui.question_html("<b>orig</b>", rewrite=False)
+    html = ui.question_html("<b>orig</b>", "")
     assert 'ai-q loading' not in html and "<b>orig</b>" in html and 'class="ai-ans"' in html
 
 
@@ -288,3 +288,15 @@ def test_prompt_explains_boxes_per_question():
 def test_prompt_says_one_page_shared_context_once():
     assert "shared context appears once" in grading.SYSTEM_PROMPT
     assert "the way to present the card's question as written" in grading.SYSTEM_PROMPT
+
+
+def test_keep_mode_shows_original_plainly_and_allows_no_questions():
+    html = ui.question_html("<b>orig</b>", "keep")
+    assert '<div id="ai-orig-plain"><b>orig</b></div>' in html and "Show original" not in html
+    assert 'class="ai-q loading"' in html and "<textarea" not in html
+    assert grading.parse_added_questions('{"questions": []}') == {"questions": [], "items": [], "show_original": False}
+    assert grading.parse_added_questions('{"questions": ["FR"]}')["questions"] == ["FR"]
+    with pytest.raises(ValueError):
+        grading.parse_added_questions("not json")
+    keep = grading.ask_prompt("Q", [("D", "sections")], sharp=False)
+    assert "never repeat or rephrase it" in keep and '"questions": []' in keep
