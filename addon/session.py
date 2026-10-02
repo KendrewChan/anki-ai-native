@@ -430,10 +430,11 @@ def probe_model(provider: str, path: str, configured: str, cwd: str, timeout: fl
         prompt = json.dumps({"type": "user", "message": {"role": "user", "content": "ok"}}) + "\n"
     proc = subprocess.Popen(cmd, cwd=cwd, text=True, stdin=subprocess.PIPE,
                             stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-    found = []
+    found, seen = [], deque(maxlen=5)
 
     def read():
         for line in getattr(proc, stream):
+            seen.append(line.strip())
             if provider == "codex":
                 m = CODEX_MODEL_LINE.match(line)
                 if m:
@@ -460,7 +461,12 @@ def probe_model(provider: str, path: str, configured: str, cwd: str, timeout: fl
     reader.join(timeout)
     _terminate(proc)
     if not found:
-        raise SessionError("error", f"could not read the model name from {provider}")
+        try:
+            rest = proc.stderr.read() if stream == "stdout" else ""
+        except (OSError, ValueError):
+            rest = ""
+        tail = " | ".join(x for x in [*seen, *rest.strip().splitlines()[-3:]] if x)[-400:]
+        raise SessionError("error", f"{provider} did not start: {tail or 'no output'}")
     remember_model(provider, configured, found[0])
     return found[0]
 

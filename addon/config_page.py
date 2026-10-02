@@ -11,6 +11,8 @@ from aqt import mw
 from . import config_ops
 from collections import deque
 
+from .fixes import Fixer
+
 from .session import (PROVIDER_LABELS, auth_command, find_cli, list_models, make_backend, model_for,
                       probe_model, read_auth_status, resolved_model)
 
@@ -25,7 +27,9 @@ CSS = """
 #log .you { margin-top: 0.6em; font-weight: 600; }
 #log .ai { margin: 0.2em 0 0 1em; }
 #log .chg { margin-left: 1em; font-family: ui-monospace, Menlo, monospace; font-size: 0.9em; }
-#log .err { margin-left: 1em; color: #d33; }
+#log .err { margin-left: 1em; color: #d33; white-space: pre-wrap; }
+#log .ai { white-space: pre-wrap; }
+#log .acts { margin: 0.3em 0 0.2em; } #log .acts button { margin: 0 0.4em 0.3em 0; color: initial; }
 #cmd { width: 100%; box-sizing: border-box; padding: 0.6em; font: inherit; border-radius: 6px;
        border: 1px solid #8888; background: transparent; color: inherit; }
 #status { font-size: 0.85em; opacity: 0.7; min-height: 1.3em; margin: 0.3em 0 0.8em; }
@@ -99,7 +103,10 @@ class ConfigPage:
         self.on_config_changed = on_config_changed
         self.session = None
         self.cwd = None
-        self.replies = deque(maxlen=3)  # (text, is_error): only the latest AI replies are shown
+        self.replies = deque(maxlen=3)  # (text, is_error, actions): only the latest replies are shown
+        self._actions = {}  # button id -> callable, for buttons inside replies
+        self.version = {}  # provider -> CLI version string
+        self.fixer = Fixer(self)
         self.history = []  # config snapshots for undo
         self.auth = "checking…"
         self.logged_in = None
@@ -119,6 +126,7 @@ class ConfigPage:
         mw.web.stdHtml(self._page_html(), context=self)
         mw.web.set_bridge_command(self._on_bridge, self)
         self._refresh_auth()
+        self.fixer.check_on_open()
 
     def _leave(self, _new_state):
         if self.session is not None:
@@ -142,6 +150,14 @@ class ConfigPage:
         elif message.startswith("aiCfg:provider:"):
             self._apply([{"set": {"provider": message[len("aiCfg:provider:"):]}}])
             self._update(None)
+        elif message.startswith("aiCfg:act:"):
+            fn = self._actions.pop(message[len("aiCfg:act:"):], None)
+            if fn:
+                fn()
+        elif message == "aiCfg:update":
+            self.fixer.update()
+        elif message == "aiCfg:revert":
+            self.fixer.revert_repair()
         elif message == "aiCfg:login":
             self._run_auth("login")
         elif message.startswith("aiCfg:send:") and not self.busy:
@@ -160,13 +176,13 @@ class ConfigPage:
     def _on_reply(self, _id, result, err):
         self.busy = False
         if err:
-            self.replies.append((f"AI error: {err.message}", True))
+            self.say(f"AI error: {err.message}", err=True)
             self._update("")
             return
         rejected = []
         actions = self._apply(result["changes"], rejected)
         reply = " ".join(filter(None, [result["reply"], *rejected])) or "Done."
-        self.replies.append((reply, bool(rejected)))
+        self.say(reply, err=bool(rejected))
         for action in actions:
             self._run_auth(action)
         self._update("")
@@ -289,7 +305,7 @@ class ConfigPage:
         label = PROVIDER_LABELS[provider]
         note = {"login": f"Opening your browser to sign in to {label}…",
                 "logout": f"Logging out of {label} (this also signs it out everywhere on this computer)…"}[action]
-        self.replies.append((note, False))
+        self.say(note, err=False)
         self._update(None)
 
         def work():
@@ -303,7 +319,7 @@ class ConfigPage:
             def done():
                 if msg:
                     cmd = " ".join(auth_command(provider, provider, action))
-                    self.replies.append((f"{action} failed: {msg} — try `{cmd}` in a terminal.", True))
+                    self.say(f"{action} failed: {msg} — try `{cmd}` in a terminal.", err=True)
                 self._refresh_auth()
 
             mw.taskman.run_on_main(done)
@@ -325,11 +341,30 @@ class ConfigPage:
         args = [self._log_html(), self._sections_html(), status, self.busy]
         mw.web.eval(f"window.aiCfg && aiCfg.update({', '.join(json.dumps(a) for a in args)});")
 
+    def say(self, text: str, err: bool = False, actions=()):
+        """Add a reply; `actions` = [(label, callable)] rendered as buttons under it."""
+        ids = []
+        for label, fn in actions:
+            self._next_id = getattr(self, "_next_id", 0) + 1
+            key = str(self._next_id)
+            self._actions[key] = fn
+            ids.append((label, key))
+        self.replies.append((text, err, ids))
+        live = {k for _t, _e, acts in self.replies for _l, k in acts}
+        self._actions = {k: f for k, f in self._actions.items() if k in live}
+        self._update(None)
+
     def _log_html(self) -> str:
         if not self.replies:
             return ('<div class="ai">Tell me what to change, in plain words — e.g. "use opus", '
                     '"give me 90 seconds to answer", "grade more strictly", "undo that".</div>')
-        return "".join(f'<div class="{"err" if bad else "ai"}">&gt; {html.escape(t)}</div>' for t, bad in self.replies)
+        out = []
+        for t, bad, acts in self.replies:
+            buttons = "".join(
+                f'<button onclick="pycmd(\'aiCfg:act:{k}\')">{html.escape(label)}</button>' for label, k in acts)
+            out.append(f'<div class="{"err" if bad else "ai"}">&gt; {html.escape(t)}'
+                       + (f'<div class="acts">{buttons}</div>' if buttons else "") + "</div>")
+        return "".join(out)
 
     def _sections_html(self) -> str:
         cfg = self._cfg()
@@ -354,6 +389,11 @@ class ConfigPage:
                         f'onchange="pycmd(\'aiCfg:model:\' + this.value)">'
                         f'<option value="{html.escape(configured)}" selected>{current}</option></select>')
         rows.insert(2, ("Model", model_select))
+        version = self.version.get(provider, "checking…")
+        rows.insert(3, ("Version", html.escape(version)
+                        + ' <button onclick="pycmd(\'aiCfg:update\')">Update</button>'))
+        if self.fixer.repair_applied():
+            rows.append(("AI repair", 'applied <button onclick="pycmd(\'aiCfg:revert\')">Revert</button>'))
         path = cfg.get(f"{provider}_path") or ""
         rows.append((f"{PROVIDER_LABELS[provider]} path",
                      html.escape(path if path and path != "auto" else f"auto → {found}")))
