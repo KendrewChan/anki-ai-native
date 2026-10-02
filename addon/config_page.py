@@ -9,7 +9,8 @@ import threading
 from aqt import mw
 
 from . import config_ops
-from .session import ClaudeSession, build_command, find_claude
+from .session import (PROVIDER_LABELS, auth_command, auth_status_command, find_cli, make_backend,
+                      parse_auth_status)
 
 STATE = "aiStudyConfig"
 
@@ -111,6 +112,9 @@ class ConfigPage:
         elif message.startswith("aiCfg:select:"):
             self.selected = message[len("aiCfg:select:"):]
             self._update(None)
+        elif message.startswith("aiCfg:provider:"):
+            self._apply([{"set": {"provider": message[len("aiCfg:provider:"):]}}])
+            self._update(None)
         elif message == "aiCfg:login":
             self._run_auth("login")
         elif message.startswith("aiCfg:send:") and not self.busy:
@@ -132,38 +136,52 @@ class ConfigPage:
             return
         if result["reply"]:
             self.transcript.append(("ai", result["reply"]))
+        for action in self._apply(result["changes"]):
+            self._run_auth(action)
+        self._update("")
+
+    def _apply(self, changes) -> list:
+        """Validate + save changes, log them; returns requested auth actions."""
         cfg = self._cfg()
         decks = self._decks()
-        new, log, auth = config_ops.apply_changes(cfg, result["changes"], self.history, decks=decks)
+        new, log, auth = config_ops.apply_changes(cfg, changes, self.history, decks=decks)
         new = config_ops.prune_deck_prompts(new, set(decks.values()))
         self.transcript += [("chg" if line.startswith("✓") else "err", line) for line in log]
         if new != cfg:
             mw.addonManager.writeConfig(self.addon, new)
             self.on_config_changed()
-        for action in auth:
-            self._run_auth(action)
-        self._update("")
+            self._drop_session()
+            if (new.get("provider") or "claude") != (cfg.get("provider") or "claude"):
+                self._refresh_auth()
+        return auth
 
     # --- claude ---
 
-    def _session(self, cfg) -> ClaudeSession:
+    def _session(self, cfg):
         if self.session is None:
             self.cwd = self.cwd or tempfile.mkdtemp(prefix="anki_ai_cfg_")
-            cmd = build_command(find_claude(cfg.get("claude_path", "")), cfg.get("model", "sonnet"),
-                                config_ops.CONFIG_SYSTEM_PROMPT)
-            self.session = ClaudeSession(cmd, self.cwd, mw.taskman.run_on_main)
+            self.session = make_backend(cfg, config_ops.CONFIG_SYSTEM_PROMPT, self.cwd, mw.taskman.run_on_main)
         return self.session
 
+    def _drop_session(self):
+        """Config changed (provider, model, path): the next message starts a fresh backend."""
+        if self.session is not None:
+            self.session.close()
+            self.session = None
+
+    def _provider(self, cfg=None) -> tuple:
+        cfg = cfg or self._cfg()
+        provider = cfg.get("provider") or "claude"
+        return provider, find_cli(provider, cfg.get(f"{provider}_path", ""))
+
     def _refresh_auth(self):
-        path = find_claude(self._cfg().get("claude_path", ""))
+        provider, path = self._provider()
 
         def work():
             try:
-                out = subprocess.run([path, "auth", "status"], capture_output=True, text=True,
-                                     timeout=20, stdin=subprocess.DEVNULL).stdout
-                st = json.loads(out)
-                ok = bool(st.get("loggedIn"))
-                text = f"logged in ({st.get('authMethod', '?')})" if ok else "logged out"
+                r = subprocess.run(auth_status_command(provider, path), capture_output=True, text=True,
+                                   timeout=20, stdin=subprocess.DEVNULL)
+                ok, text = parse_auth_status(provider, r.returncode, r.stdout)
             except Exception as e:  # missing binary, bad JSON, timeout — show it, don't crash the page
                 ok, text = False, f"unknown ({e.__class__.__name__}: {e})"
             mw.taskman.run_on_main(lambda: self._set_auth(ok, text))
@@ -177,15 +195,16 @@ class ConfigPage:
 
     def _run_auth(self, action: str):
         """login opens the browser via Claude Code's own flow; the add-on never sees credentials."""
-        path = find_claude(self._cfg().get("claude_path", ""))
-        note = {"login": "Opening your browser to sign in to Claude…",
-                "logout": "Logging out of Claude (this also signs out Claude Code on this Mac)…"}[action]
+        provider, path = self._provider()
+        label = PROVIDER_LABELS[provider]
+        note = {"login": f"Opening your browser to sign in to {label}…",
+                "logout": f"Logging out of {label} (this also signs it out everywhere on this computer)…"}[action]
         self.transcript.append(("ai", note))
         self._update(None)
 
         def work():
             try:
-                r = subprocess.run([path, "auth", action], capture_output=True, text=True,
+                r = subprocess.run(auth_command(provider, path, action), capture_output=True, text=True,
                                    timeout=300, stdin=subprocess.DEVNULL)
                 msg = None if r.returncode == 0 else (r.stderr or r.stdout).strip()[-300:]
             except Exception as e:
@@ -193,7 +212,8 @@ class ConfigPage:
 
             def done():
                 if msg:
-                    self.transcript.append(("err", f"{action} failed: {msg} — try `claude auth {action}` in a terminal."))
+                    cmd = " ".join(auth_command(provider, provider, action))
+                    self.transcript.append(("err", f"{action} failed: {msg} — try `{cmd}` in a terminal."))
                 self._refresh_auth()
 
             mw.taskman.run_on_main(done)
@@ -227,13 +247,21 @@ class ConfigPage:
         login = html.escape(self.auth)
         if self.logged_in is False:
             login += ' <button onclick="pycmd(\'aiCfg:login\')">Log in</button>'
-        rows = [("Login", login)] + [
+        provider, found = self._provider(cfg)
+        # Recovery without the AI: if the current provider is broken, the chat can't fix it.
+        switch = "".join(
+            f' <button onclick="pycmd(\'aiCfg:provider:{p}\')">Use {PROVIDER_LABELS[p]}</button>'
+            for p in PROVIDER_LABELS if p != provider
+        )
+        rows = [("Provider", html.escape(PROVIDER_LABELS[provider]) + switch), ("Login", login)] + [
             (label, html.escape(str(cfg.get(key))))
-            for label, key in (("Model", "model"), ("Ask timeout (s)", "ask_timeout_s"),
+            for label, key in (("Ask timeout (s)", "ask_timeout_s"),
                                ("Grade timeout (s)", "grade_timeout_s"), ("Missed append", "missed_append"))
         ]
-        path = cfg.get("claude_path") or ""
-        rows.append(("Claude path", html.escape(path if path and path != "auto" else f"auto → {find_claude()}")))
+        rows.insert(2, ("Model", html.escape(cfg.get("model") or "default")))
+        path = cfg.get(f"{provider}_path") or ""
+        rows.append((f"{PROVIDER_LABELS[provider]} path",
+                     html.escape(path if path and path != "auto" else f"auto → {found}")))
         table = "".join(f'<tr><td class="k">{k}</td><td>{v}</td></tr>' for k, v in rows)
         custom = cfg.get("custom") or []
         rules = ("<ol>" + "".join(f"<li>{html.escape(r)}</li>" for r in custom) + "</ol>"

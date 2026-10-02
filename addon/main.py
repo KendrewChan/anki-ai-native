@@ -14,7 +14,7 @@ from aqt.reviewer import Reviewer
 
 from . import config_ops, grading, ui
 from .config_page import ConfigPage
-from .session import ClaudeSession, build_command, find_claude
+from .session import make_backend
 
 ADDON = __name__.split(".")[0]
 
@@ -44,13 +44,11 @@ def cfg() -> dict:
     return mw.addonManager.getConfig(ADDON) or {}
 
 
-def session() -> ClaudeSession:
+def session():
     if S.session is None:
         c = cfg()
         S.cwd = S.cwd or tempfile.mkdtemp(prefix="anki_ai_")
-        cmd = build_command(find_claude(c.get("claude_path", "")), c.get("model", "sonnet"),
-                            grading.system_prompt(c.get("custom")))
-        S.session = ClaudeSession(cmd, S.cwd, mw.taskman.run_on_main)
+        S.session = make_backend(c, grading.system_prompt(c.get("custom")), S.cwd, mw.taskman.run_on_main)
     return S.session
 
 
@@ -81,7 +79,7 @@ def eval_card(js: str):
 def on_error(err) -> str:
     """Apply the failure policy; return the message to show."""
     if err.kind == "limit":
-        S.disabled = f"Claude usage limit: {err.message}"
+        S.disabled = f"Usage limit: {err.message}"
     elif err.kind in ("unavailable", "crashed", "error"):
         S.failures += 1
         if S.failures >= 2:

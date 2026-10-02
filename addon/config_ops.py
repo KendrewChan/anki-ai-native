@@ -6,14 +6,17 @@ import os
 from .grading import parse_json_reply
 
 MODEL_ALIASES = ("haiku", "sonnet", "opus", "fable")
+PROVIDERS = ("claude", "codex")  # keep in sync with session.PROVIDERS
 TIMEOUT_RANGE = (5, 600)
 
 SETTINGS = {
-    "model": "Claude model: an alias (haiku, sonnet, opus, fable) or a full model id starting with claude-",
+    "provider": "which AI runs the tutor: \"claude\" (Claude Code CLI, Claude subscription) or \"codex\" (OpenAI Codex CLI, ChatGPT subscription)",
+    "model": "model for the provider; \"\" = the provider's default. claude: haiku, sonnet, opus, fable or a claude-… id. codex: an OpenAI model id",
     "ask_timeout_s": "seconds to wait for the sharp question (5-600)",
     "grade_timeout_s": "seconds to wait for a grade (5-600)",
     "missed_append": "true/false — append Missed bullets to the card's Back after grading",
     "claude_path": "absolute path to the claude CLI executable, or \"\" to auto-detect",
+    "codex_path": "absolute path to the codex CLI executable, or \"\" to auto-detect",
 }
 
 CONFIG_SYSTEM_PROMPT = """You manage the settings of an Anki add-on that uses Claude as a flashcard tutor. The user talks to you in plain language; you turn requests into changes.
@@ -110,9 +113,20 @@ def parse_config_reply(text: str) -> dict:
     return {"reply": str(obj.get("reply", "")).strip(), "changes": [c for c in changes if isinstance(c, dict)]}
 
 
-def _validate(key: str, value, is_executable):
+def _validate(key: str, value, is_executable, provider: str = "claude"):
+    if key == "provider":
+        v = str(value).strip().lower()
+        if v not in PROVIDERS:
+            raise ValueError(f"unknown provider {v!r} — use {' or '.join(PROVIDERS)}")
+        return v
     if key == "model":
         v = str(value).strip()
+        if v.lower() in ("", "default"):
+            return ""
+        if provider == "codex":
+            if v in MODEL_ALIASES or v.startswith("claude-") or " " in v:
+                raise ValueError(f"{v!r} is not an OpenAI model id — Codex needs e.g. a gpt-… model, or default")
+            return v
         if v in MODEL_ALIASES or v.startswith("claude-"):
             return v
         raise ValueError(f"unknown model {v!r} — use {', '.join(MODEL_ALIASES)} or a claude-… id")
@@ -133,7 +147,7 @@ def _validate(key: str, value, is_executable):
         if str(value).lower() in ("false", "off", "no", "0"):
             return False
         raise ValueError("missed_append must be true or false")
-    if key == "claude_path":
+    if key in ("claude_path", "codex_path"):
         if str(value).strip().lower() in ("", "auto"):
             return ""
         v = os.path.expanduser(str(value).strip())
@@ -162,9 +176,14 @@ def apply_changes(cfg: dict, changes: list, history: list, is_executable=None, d
                 before = _copy(new)  # an undo is not itself pushed
                 log.append("✓ undid the previous change")
             elif "set" in ch:
-                for key, value in (ch["set"] or {}).items():
-                    v = _validate(key, value, is_executable)
+                items = sorted((ch["set"] or {}).items(), key=lambda kv: kv[0] != "provider")
+                for key, value in items:
+                    v = _validate(key, value, is_executable, new.get("provider") or "claude")
                     log.append(f"✓ {key}: {_show(new.get(key))} → {_show(v)}")
+                    if key == "provider" and v != (new.get("provider") or "claude") and "model" not in dict(items):
+                        if new.get("model"):
+                            log.append(f"✓ model: {new['model']} → default")
+                        new["model"] = ""
                     new[key] = v
             elif "add_custom" in ch:
                 rule = str(ch["add_custom"]).strip()
@@ -216,4 +235,6 @@ def _copy(cfg: dict) -> dict:
 
 
 def _show(v) -> str:
+    if v == "":
+        return "default"
     return json.dumps(v) if isinstance(v, bool) else str(v)

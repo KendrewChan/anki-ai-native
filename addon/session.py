@@ -352,3 +352,28 @@ def _terminate(proc):
         proc.wait(timeout=3)
     except subprocess.TimeoutExpired:
         proc.kill()
+
+
+# --- login state per provider (the add-on never handles credentials; the CLIs do) ---
+
+PROVIDER_LABELS = {"claude": "Claude Code", "codex": "Codex"}
+
+
+def auth_status_command(provider: str, path: str) -> list:
+    return [path, "login", "status"] if provider == "codex" else [path, "auth", "status"]
+
+
+def parse_auth_status(provider: str, returncode: int, out: str) -> tuple:
+    """-> (logged_in, text). Claude prints JSON; Codex prints a sentence."""
+    if provider == "codex":
+        line = (out or "").strip().splitlines()[0] if (out or "").strip() else ""
+        ok = returncode == 0 and "logged in" in line.lower() and "not" not in line.lower()
+        return ok, (line or "logged out") if ok else "logged out"
+    st = json.loads(out)
+    ok = bool(st.get("loggedIn"))
+    return ok, f"logged in ({st.get('authMethod', '?')})" if ok else "logged out"
+
+
+def auth_command(provider: str, path: str, action: str) -> list:
+    """action: login | logout."""
+    return [path, action] if provider == "codex" else [path, "auth", action]

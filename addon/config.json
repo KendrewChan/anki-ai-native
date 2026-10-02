@@ -1,6 +1,8 @@
 {
-    "claude_path": "",
+    "provider": "claude",
     "model": "sonnet",
+    "claude_path": "",
+    "codex_path": "",
     "missed_append": true,
     "ask_timeout_s": 30,
     "grade_timeout_s": 60,
