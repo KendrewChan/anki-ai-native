@@ -22,6 +22,8 @@ Two kinds of message arrive:
    If you notice the user repeating a gap from earlier in this session, say so in feedback.
    Reply: {"per_question": [...], "verdict": "...", "ease": N, "feedback": "...", "missed": ["..."]}
 
+A card may come with "Deck rules" — instructions for the deck it belongs to, outermost deck first; inner (more specific) decks win on conflict. Follow them for that card only.
+
 Reply with the JSON object only. No prose, no code fences."""
 
 def system_prompt(custom: list) -> str:
@@ -54,18 +56,26 @@ def answer_only(answer_html: str) -> str:
     return answer_html[m.end():] if m else answer_html
 
 
-def ask_prompt(question: str, answer: str) -> str:
-    return f"NEW CARD\n\nQuestion:\n{question}\n\nReference answer:\n{answer}"
+def deck_rules_block(deck_rules: list) -> str:
+    """deck_rules: [(deck name, prompt)] outermost first."""
+    if not deck_rules:
+        return ""
+    return "\n\nDeck rules (outer → inner):\n" + "\n".join(f"- {name}: {p}" for name, p in deck_rules)
 
 
-def grade_prompt(question: str, asked: list, answer: str, user_answers: list) -> str:
+def ask_prompt(question: str, answer: str, deck_rules: list = ()) -> str:
+    return f"NEW CARD\n\nQuestion:\n{question}\n\nReference answer:\n{answer}{deck_rules_block(deck_rules)}"
+
+
+def grade_prompt(question: str, asked: list, answer: str, user_answers: list, deck_rules: list = ()) -> str:
     """asked = questions shown (empty when no rewrite happened: cloze or ask failed)."""
     asked = asked or [question]
     pairs = "\n\n".join(
         f"Q{i}: {q}\nUser's answer {i}: {a.strip() or '(blank)'}"
         for i, (q, a) in enumerate(zip(asked, _pad(user_answers, len(asked))), 1)
     )
-    return f"GRADE\n\nCard question:\n{question}\n\nReference answer:\n{answer}\n\n{pairs}"
+    return (f"GRADE\n\nCard question:\n{question}\n\nReference answer:\n{answer}"
+            f"{deck_rules_block(deck_rules)}\n\n{pairs}")
 
 
 def _pad(items: list, n: int) -> list:

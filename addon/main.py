@@ -12,7 +12,7 @@ from aqt.overview import Overview
 from aqt.qt import QAction
 from aqt.reviewer import Reviewer
 
-from . import grading, ui
+from . import config_ops, grading, ui
 from .config_page import ConfigPage
 from .session import ClaudeSession, build_command
 
@@ -58,6 +58,17 @@ def active() -> bool:
     return S.enabled and not S.disabled
 
 
+def deck_names() -> dict:
+    """Full deck name -> deck id (str), the shape config_ops expects."""
+    return {d.name: str(d.id) for d in mw.col.decks.all_names_and_ids()}
+
+
+def deck_rules(card, c: dict) -> list:
+    """Prompt chain for the card's own deck (its home deck when it sits in a filtered deck)."""
+    did = card.odid or card.did
+    return config_ops.deck_chain(mw.col.decks.name(did), deck_names(), c.get("deck_prompts") or {})
+
+
 def rewrite_enabled(card) -> bool:
     return card.note_type()["type"] != MODEL_CLOZE
 
@@ -99,11 +110,12 @@ def on_show_question(card):
         return
     q = grading.strip_html(card.question())
     a = grading.strip_html(grading.answer_only(card.answer()))
-    S.ctx[card.id] = {"q": q, "a": a, "questions": []}
+    c = cfg()
+    rules = deck_rules(card, c)
+    S.ctx[card.id] = {"q": q, "a": a, "questions": [], "rules": rules}
     if not rewrite_enabled(card):
         return
-    c = cfg()
-    session().request(card.id, grading.ask_prompt(q, a), grading.parse_questions,
+    session().request(card.id, grading.ask_prompt(q, a, rules), grading.parse_questions,
                       c.get("ask_timeout_s", 30), on_asked)
 
 
@@ -145,7 +157,7 @@ def submit(payload: str):
         return
     answers = [str(a) for a in json.loads(payload)]
     questions = list(ctx["questions"])  # snapshot: what the user saw when submitting
-    prompt = grading.grade_prompt(ctx["q"], questions, ctx["a"], answers)
+    prompt = grading.grade_prompt(ctx["q"], questions, ctx["a"], answers, ctx["rules"])
 
     def on_graded(cid, result, err):
         if cid != S.card_id or mw.reviewer.state != "question":
