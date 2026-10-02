@@ -46,7 +46,7 @@ Custom generic rules: a numbered list of plain-language instructions that apply 
 
 Deck prompts: each Anki deck can have ONE free-text prompt that applies to cards in that deck and all its subdecks (subdecks inherit parent prompts). Use these when the user mentions a deck or "this deck" (= the selected deck). Use the exact full deck name from the deck list. Setting a deck prompt replaces the old one — when the user says "also …", merge the old prompt and the new request into one prompt. Never copy a parent deck's prompt into a subdeck's — it is already inherited.
 
-Deck sharp questions: by default the AI first turns each card into sharp questions. A deck can turn this off (the user then answers the card's own question as written — one AI call per card, faster) or back on, for itself and its subdecks (the innermost deck with a setting wins). A deck prompt CANNOT do this — whenever the user wants sharp questions on/off for a deck, use set_deck_sharp, never a deck prompt. If a deck prompt only says to skip sharp questions, clear it in the same reply.
+Deck sharp questions: by default the AI first turns each card into sharp questions. A deck can turn this off (the user then answers the card's own question as written — one AI call per card, faster) or back on. Setting it on a deck makes all its subdecks follow (their own settings are dropped); set a subdeck afterwards to make an exception. A deck prompt CANNOT do this — whenever the user wants sharp questions on/off for a deck, use set_deck_sharp, never a deck prompt. If a deck prompt only says to skip sharp questions, clear it in the same reply.
 
 Each message gives you the current settings, custom rules, deck list, deck prompts, the selected deck and login state, then the user's request.
 
@@ -128,6 +128,11 @@ def sharp_source(cfg: dict, deck_name: str, decks: dict):
 
 def sharp_for_deck(cfg: dict, deck_name: str, decks: dict) -> bool:
     return sharp_source(cfg, deck_name, decks)[0]
+
+
+def deck_sharp_change(cfg: dict, deck_name: str, decks: dict) -> dict:
+    """The change that flips sharp questions for a deck (its subdecks follow)."""
+    return {"set_deck_sharp": {"deck": deck_name, "on": not sharp_for_deck(cfg, deck_name, decks)}}
 
 
 def prune_deck_prompts(cfg: dict, deck_ids: set) -> dict:
@@ -293,8 +298,13 @@ def apply_changes(cfg: dict, changes: list, history: list, is_executable=None, d
                         raise ValueError(f"{name} has no sharp questions setting")
                     log.append(f"✓ sharp questions for {name}: follow parent (default on)")
                 else:
+                    # Subdecks follow immediately: drop their own settings.
+                    subs = [str(i) for n, i in decks.items() if n.startswith(name + "::") and str(i) in overrides]
+                    for i in subs:
+                        del overrides[i]
                     overrides[str(decks[name])] = on
-                    log.append(f"✓ sharp questions for {name}: {'on' if on else 'off'}")
+                    follow = f" ({len(subs)} subdeck setting(s) now follow it)" if subs else ""
+                    log.append(f"✓ sharp questions for {name} and its subdecks: {'on' if on else 'off'}{follow}")
                 new["deck_sharp"] = overrides
             elif ch.get("login"):
                 auth.append("login")

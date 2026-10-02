@@ -26,7 +26,7 @@ Type what you want in plain words — "use opus", "give me 90 seconds to answer"
 
 - **Configurations** — provider (Claude Code / Codex; "use codex"), model ("default" = the provider's), timeouts, **Missed append** On/Off button (hover the **?** for what they do), CLI path (auto-detected), login.
 - **Custom Generic Rules** — apply to every card.
-- **Deck Prompts** — one prompt per deck; subdecks inherit their parents'. Sharp questions are switched per deck here too ("no sharp questions for this deck"). Click a deck to see what applies to it.
+- **Deck Prompts** — one prompt per deck; subdecks inherit their parents'. Sharp questions have an On/Off button per deck in the panel (or say "no sharp questions for this deck"). Switching a deck makes all its subdecks follow; switch a subdeck afterwards to make an exception, which lasts until a parent is switched again. Click a deck to see what applies to it.
 
 ## Generate/Update Cards (✨ Generate/Update Cards)
 

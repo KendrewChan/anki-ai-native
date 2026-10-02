@@ -82,7 +82,7 @@ A main-window state (`aiStudyConfig`, **← Back** → deck list).
 - **Deck Prompts**:
   - The real deck tree, with ● marking decks that have a prompt.
   - Selecting a deck shows its own prompt, the ones it inherits, and whether sharp questions are on there (and which deck decides it).
-  - Sharp questions per deck: `deck_sharp: {deck_id: bool}`. The innermost deck on the path with a setting wins; none = on. A deck prompt can't switch them: the decision is made before any AI call, so the Settings AI uses `set_deck_sharp`. The old global `sharp_questions` key is dropped on the next settings change.
+  - Sharp questions per deck: `deck_sharp: {deck_id: bool}`. The innermost deck on the path with a setting wins; none = on. The panel's On/Off button flips the selected deck's effective value. Setting a deck (button or chat) drops its subdecks' own settings, so they follow it at once. A subdeck set afterwards stays as an exception until one of its ancestors is set again. A deck prompt can't switch them: the decision is made before any AI call, so the Settings AI uses `set_deck_sharp`. The old global `sharp_questions` key is dropped on the next settings change.
   - Stored as `deck_prompts: {deck_id: prompt}`, so prompts survive deck renames. Prompts and sharp settings of deleted decks are pruned on save.
   - Deck names resolve exact → case-insensitive → unique leaf name; anything else is rejected.
 - Changes apply from the next review session. Unsent drafts and in-flight replies survive leaving the page (in memory until Anki restarts).

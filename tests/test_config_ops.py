@@ -120,13 +120,29 @@ def test_deck_sharp_override_inherited_innermost_wins():
     cfg = dict(BASE)
     assert config_ops.sharp_source(cfg, "Coding::Languages::Golang", DECKS) == (True, None)  # default on
     new, log, _, _ = apply([{"set_deck_sharp": {"deck": "Coding", "on": False}}], cfg=cfg, decks=DECKS)
-    assert new["deck_sharp"] == {"1": False} and log == ["✓ sharp questions for Coding: off"]
+    assert new["deck_sharp"] == {"1": False} and log == ["✓ sharp questions for Coding and its subdecks: off"]
     assert config_ops.sharp_source(new, "Coding::Languages::Golang", DECKS) == (False, "Coding")
     assert config_ops.sharp_for_deck(new, "HSK", DECKS) is True
     new, _, _, _ = apply([{"set_deck_sharp": {"deck": "Coding::Languages", "on": "on"}}], cfg=new, decks=DECKS)
     assert config_ops.sharp_source(new, "Coding::Languages::Golang", DECKS) == (True, "Coding::Languages")
     new, log, _, _ = apply([{"set_deck_sharp": {"deck": "Coding", "on": None}}], cfg=new, decks=DECKS)
     assert new["deck_sharp"] == {"2": True} and log == ["✓ sharp questions for Coding: follow parent (default on)"]
+
+
+def test_deck_sharp_parent_change_makes_subdecks_follow_others_kept():
+    cfg = dict(BASE, deck_sharp={"2": True, "3": False, "4": False, "5": True})
+    new, log, _, _ = apply([{"set_deck_sharp": {"deck": "Coding", "on": False}}], cfg=cfg, decks=DECKS)
+    assert new["deck_sharp"] == {"1": False, "4": False, "5": True}
+    assert "2 subdeck setting(s) now follow it" in log[0]
+    new, _, _, _ = apply([{"set_deck_sharp": {"deck": "Coding::Languages::Golang", "on": True}}], cfg=new, decks=DECKS)
+    assert new["deck_sharp"]["1"] is False and new["deck_sharp"]["3"] is True  # a subdeck exception keeps the parent
+
+
+def test_deck_sharp_change_flips_effective_value():
+    cfg = dict(BASE, deck_sharp={"1": False})
+    assert config_ops.deck_sharp_change(cfg, "Coding::Languages", DECKS) == {
+        "set_deck_sharp": {"deck": "Coding::Languages", "on": True}}
+    assert config_ops.deck_sharp_change(cfg, "HSK", DECKS) == {"set_deck_sharp": {"deck": "HSK", "on": False}}
 
 
 def test_prune_drops_missing_decks_from_prompts_and_sharp():

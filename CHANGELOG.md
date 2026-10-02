@@ -4,7 +4,7 @@ What changed in each version, newest first. How the add-on works today is in [do
 
 ## v1.13 — Sharp questions per deck (2026-10-02)
 
-- Sharp questions are now set **per deck** (on by default; subdecks inherit, the innermost deck wins), e.g. tell Settings "no sharp questions for this deck". The deck panel shows whether they are on and which deck decides.
+- Sharp questions are now set **per deck**: an On/Off button in the deck panel (or tell Settings "no sharp questions for this deck"). On by default. Switching a deck makes all its subdecks follow; a subdeck switched afterwards stays an exception until a parent is switched again.
 - Removed the global **Sharp questions** toggle; the old setting is dropped on the next settings change.
 - Fix: a deck prompt like "don't generate sharp questions" had no effect, because the choice is made before any AI call. The Settings AI now uses the new deck setting instead of a prompt.
 

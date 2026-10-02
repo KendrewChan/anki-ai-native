@@ -146,6 +146,9 @@ class ConfigPage(ChatPage):
         elif command == "toggle" and arg in config_ops.TOGGLES:
             self.apply([config_ops.toggle_change(self.cfg(), arg)])
             self._update(None)
+        elif command == "decksharp" and arg in deck_ids():
+            self.apply([config_ops.deck_sharp_change(self.cfg(), arg, deck_ids())])
+            self._update(None)
         elif command == "provider":
             self.apply([{"set": {"provider": arg}}])
             self._update(None)
@@ -398,8 +401,10 @@ class ConfigPage(ChatPage):
             inh = "".join(f'<div class="inh">↳ {html.escape(n)}: <span class="p">{html.escape(p)}</span></div>'
                           for n, p in chain)
             on, src = config_ops.sharp_source(cfg, sel, decks)
-            where = "this deck" if src == sel else src or "default"
-            sharp = f'<div class="inh">Sharp questions: {"On" if on else "Off"} ({html.escape(where)})</div>'
+            where = "" if src == sel else f" (from {src})" if src else " (default)"
+            js = html.escape(f"pycmd({json.dumps('aiCfg:decksharp:' + sel)})", quote=True)
+            sharp = (f'<div class="inh">Sharp questions: <button class="tog{" on" if on else ""}" onclick="{js}">'
+                     f'{"On" if on else "Off"}</button>{html.escape(where)} — subdecks follow</div>')
             panel = (f'<div class="panel"><div class="name">{html.escape(sel)}</div>'
                      f'<div class="p">{html.escape(own) if own else "<i>no prompt — tell the AI what this deck needs</i>"}</div>'
                      f'{inh}{sharp}</div>')
