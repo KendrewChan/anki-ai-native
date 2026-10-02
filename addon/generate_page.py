@@ -75,6 +75,7 @@ window.aiGen = {
   toggleOrig(btn) {
     const card = btn.closest(".card");
     const on = card.classList.toggle("orig");
+    card.querySelectorAll(on ? ".v-orig details" : ".v-upd details").forEach(d => { d.open = true; });  // full view
     if (on) this.origs.add(card.dataset.card); else this.origs.delete(card.dataset.card);
   },
 };
@@ -324,8 +325,8 @@ class GeneratePage:
             if original is not None:  # both versions rendered; the button swaps them in the page, no round-trip
                 body = (f'<div class="v-upd">{body}</div><div class="v-orig">'
                         f'{self._card_body(f"{i}. <span class=kind>ORIGINAL</span>", original, "o" + str(s["id"]))}</div>')
-                toggle = ('<button onclick="aiGen.toggleOrig(this)"><span class="l-upd">Show original</span>'
-                          '<span class="l-orig">Show update</span></button>')
+                toggle = ('<button onclick="aiGen.toggleOrig(this)"><span class="l-upd">Show Original</span>'
+                          '<span class="l-orig">Show Update</span></button>')
             approve = (f'<span class="okmark">✓ Approved</span>'
                       f'<button onclick="pycmd(\'aiGen:unapprove:{s["id"]}\')">Unapprove</button>' if s["ok"]
                       else f'<button onclick="pycmd(\'aiGen:approve:{s["id"]}\')">Approve</button>')
