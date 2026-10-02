@@ -5,7 +5,7 @@ import json
 
 CSS = """
 <style>
-#ai-study { text-align: left; max-width: 46em; margin: 0 auto 1em; font-size: 0.95em; }
+#ai-study { text-align: left; width: min(92vw, 70em); margin: 0 auto 1em; font-size: 0.95em; }
 #ai-q { font-size: 1.15em; font-weight: 600; margin: 0.4em 0 0.8em; white-space: pre-wrap; }
 #ai-q.loading { opacity: 0.55; font-weight: 400; font-style: italic; }
 #ai-orig { margin-bottom: 0.8em; }
