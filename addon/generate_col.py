@@ -1,4 +1,8 @@
-"""Generate: stage, list, approve, submit, discard cards in the "AI-GEN" deck. Takes an anki Collection; no aqt."""
+"""Generate: stage, list, approve, submit, discard cards in the "AI-GEN" deck. Takes an anki Collection; no aqt.
+
+Every action does a few batched collection ops (not one per card): Anki keeps only ~30 undo steps, and the
+custom undo entry that groups an action must still be in the queue when it is merged.
+"""
 
 from .generate_ops import TEMP_DECK
 
@@ -64,11 +68,40 @@ def _staged_did(col, real_deck: str):
     return col.decks.id(f"{TEMP_DECK}::{real_deck}", create=True)
 
 
+def _finish(col, pos):
+    """Merge everything since `pos` into one undo step. If the bookmark still fell out of Anki's undo queue,
+    the changes are already saved: report them rather than fail (they just aren't a single undo step)."""
+    try:
+        return col.merge_undo_entries(pos)
+    except Exception as e:
+        if "undo" not in str(e).lower():
+            raise
+        from anki.collection import OpChanges
+        return OpChanges(card=True, note=True, deck=True, tag=True, browser_table=True, browser_sidebar=True,
+                         note_text=True, study_queues=True)
+
+
 def apply_ops(col, ops) -> tuple:
     """Run plan_changes ops as one undo step. Returns (OpChanges, summary counts)."""
+    from anki.collection import AddNoteRequest
+
     pos = col.add_custom_undo_entry(TEMP_DECK)
     counts = {"added": 0, "updated": 0, "edited": 0, "removed": 0}
     by_original = {s["of"]: s["id"] for s in staged(col) if s["of"]}
+    adds, changed, removed = [], {}, set()  # changed: staged note id -> Note
+    new_copies = {}  # original id -> copy created in this batch
+    dids = {}
+
+    def did(real_deck):
+        if real_deck not in dids:
+            dids[real_deck] = _staged_did(col, real_deck)
+        return dids[real_deck]
+
+    def existing(nid):
+        if nid not in changed:
+            changed[nid] = col.get_note(nid)
+        return changed[nid]
+
     for op in ops:
         if op[0] == "add":
             _, deck, kind, values = op
@@ -76,48 +109,53 @@ def apply_ops(col, ops) -> tuple:
             for i, v in enumerate(values):
                 note.fields[i] = v
             note.tags = [TAG]
-            col.add_note(note, _staged_did(col, deck))
+            adds.append(AddNoteRequest(note=note, deck_id=did(deck)))
             counts["added"] += 1
         elif op[0] == "update":
             _, orig, fields = op
-            if orig["id"] in by_original:  # already staged: change that copy
-                copy = col.get_note(by_original[orig["id"]])
+            if orig["id"] in new_copies:
+                copy = new_copies[orig["id"]]
+            elif orig["id"] in by_original:  # already staged: change that copy
+                copy = existing(by_original[orig["id"]])
             else:
                 src = col.get_note(orig["id"])
                 copy = col.new_note(src.note_type())
                 for k, v in src.items():
                     copy[k] = v
                 copy.tags = list(src.tags) + [TAG, f"{OF}{src.id}"]
+                new_copies[orig["id"]] = copy
+                adds.append(AddNoteRequest(note=copy, deck_id=did(orig["deck"])))
             for k, v in fields.items():
                 copy[k] = v
             copy.tags = [t for t in copy.tags if t != OK]  # changed by the AI: needs a fresh look
-            if copy.id:
-                col.update_note(copy)
-            else:
-                col.add_note(copy, _staged_did(col, orig["deck"]))
-                by_original[orig["id"]] = copy.id
             counts["updated"] += 1
         elif op[0] == "edit":
             _, nid, fields = op
-            note = col.get_note(nid)
+            note = existing(nid)
             for k, v in fields.items():
                 note[k] = v
             note.tags = [t for t in note.tags if t != OK]
-            col.update_note(note)
             counts["edited"] += 1
         elif op[0] == "remove":
-            col.remove_notes([op[1]])
+            removed.add(op[1])
             counts["removed"] += 1
-    return col.merge_undo_entries(pos), counts
+    if adds:
+        col.add_notes(adds)
+    notes = [n for nid, n in changed.items() if nid not in removed]
+    if notes:
+        col.update_notes(notes)
+    if removed:
+        col.remove_notes(list(removed))
+    return _finish(col, pos), counts
 
 
 def _cleanup(col):
-    """Remove AI-GEN subdecks left without cards (deepest first), and AI-GEN itself once empty."""
+    """Remove AI-GEN subdecks left without cards, and AI-GEN itself once empty — in one removal."""
     temp = [d.name for d in col.decks.all_names_and_ids() if d.name == TEMP_DECK or d.name.startswith(TEMP_DECK + "::")]
-    for name in sorted(temp, key=lambda n: -n.count("::")):
-        did = col.decks.id_for_name(name)
-        if did is not None and not col.find_cards(_search_deck(col, name)):
-            col.decks.remove([did])
+    empty = {n for n in temp if not col.find_cards(_search_deck(col, n))}
+    top = [n for n in empty if "::".join(n.split("::")[:-1]) not in empty]  # a removed parent takes its children
+    if top:
+        col.decks.remove([col.decks.id_for_name(n) for n in top])
 
 
 def approve(col, ids=None, ok: bool = True) -> tuple:
@@ -131,7 +169,7 @@ def approve(col, ids=None, ok: bool = True) -> tuple:
             notes.append(note)
     if notes:
         col.update_notes(notes)
-    return col.merge_undo_entries(pos), len(notes)
+    return _finish(col, pos), len(notes)
 
 
 def submit(col) -> tuple:
@@ -141,7 +179,7 @@ def submit(col) -> tuple:
 
     pos = col.add_custom_undo_entry(f"Submit {TEMP_DECK}")
     counts = {"updated": 0, "added": 0}
-    drop = []
+    drop, notes, moves = [], [], {}  # moves: real deck -> card ids
     for s in staged(col):
         if not s["ok"]:
             continue
@@ -156,18 +194,22 @@ def submit(col) -> tuple:
             for k, v in note.items():
                 if k in orig:
                     orig[k] = v
-            col.update_note(orig)
+            notes.append(orig)
             drop.append(note.id)
             counts["updated"] += 1
         else:
-            col.set_deck(note.card_ids(), col.decks.id(s["deck"] or "Default", create=True))
+            moves.setdefault(s["deck"] or "Default", []).extend(note.card_ids())
             note.tags = [t for t in note.tags if t not in (TAG, OK) and not t.startswith(OF)]
-            col.update_note(note)
+            notes.append(note)
             counts["added"] += 1
+    for deck, cids in moves.items():
+        col.set_deck(cids, col.decks.id(deck, create=True))
+    if notes:
+        col.update_notes(notes)
     if drop:
         col.remove_notes(drop)
     _cleanup(col)
-    return col.merge_undo_entries(pos), counts
+    return _finish(col, pos), counts
 
 
 def discard(col, ids=None) -> tuple:
@@ -177,4 +219,4 @@ def discard(col, ids=None) -> tuple:
     if drop:
         col.remove_notes(drop)
     _cleanup(col)
-    return col.merge_undo_entries(pos), len(drop)
+    return _finish(col, pos), len(drop)
