@@ -6,6 +6,7 @@ What changed in each version, newest first. How the add-on works today is in [do
 
 - Sub-questions are numbered under their question (3.1, 3.2, …) instead of 1), 2), and each part has its own hint.
 - The verdict numbers its rows the same way.
+- Hint tooltips stay inside the window.
 
 ## v1.20 — Colour your answer, not the model answer (2026-10-02)
 

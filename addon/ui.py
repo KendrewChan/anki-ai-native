@@ -19,7 +19,7 @@ CSS = """
            border-radius: 50%; border: 1px solid #8888; text-align: center; font-size: 0.7em; font-weight: 400;
            cursor: help; vertical-align: middle; opacity: 0.7; }
 .ai-hint .tip { display: none; position: absolute; top: calc(100% + 6px); left: -0.6em; z-index: 10; width: max-content;
-                max-width: 24em; white-space: normal; text-align: left; font-size: 1.3em; line-height: 1.4;
+                max-width: min(24em, calc(100vw - 16px)); white-space: normal; text-align: left; font-size: 1.3em; line-height: 1.4;
                 padding: 0.45em 0.7em; border-radius: 6px; background: #2b2b2b; color: #eee; box-shadow: 0 3px 12px #0006; }
 .ai-hint:hover, .ai-hint:focus { opacity: 1; } .ai-hint:hover .tip, .ai-hint:focus .tip { display: block; }
 .ai-ans { width: 100%; box-sizing: border-box; height: var(--ai-box-h, 35vh); min-height: 6em; resize: vertical;
@@ -88,6 +88,13 @@ JS = """
     tip.className = "tip";
     tip.innerHTML = hint;
     help.append(tip);
+    const place = () => {  // keep the tip inside the window: shift it left by however much it sticks out
+      tip.style.left = "";
+      const r = tip.getBoundingClientRect(), over = r.right - (document.documentElement.clientWidth - 8);
+      if (over > 0) tip.style.left = "calc(-0.6em - " + over + "px)";
+    };
+    help.addEventListener("mouseenter", place);
+    help.addEventListener("focus", place);
     return help;
   }
 
