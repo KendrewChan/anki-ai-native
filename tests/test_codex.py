@@ -150,3 +150,21 @@ def test_unknown_provider_rejected(value):
 def test_model_default_keyword():
     new, log = apply([{"set": {"model": "default"}}])
     assert new["model"] == "" and log == ["✓ model: sonnet → default"]
+
+
+def _fake_cli(tmp_path, body):
+    p = tmp_path / "cli"
+    p.write_text(f"#!{sys.executable}\nimport sys\n{body}\n")
+    p.chmod(0o755)
+    return str(p)
+
+
+def test_read_auth_status_codex_reads_stderr(tmp_path):
+    # real codex 0.152.0 prints "Logged in using ChatGPT" on stderr with an empty stdout
+    path = _fake_cli(tmp_path, 'sys.stderr.write("Logged in using ChatGPT\\n")')
+    assert session.read_auth_status("codex", path) == (True, "Logged in using ChatGPT")
+
+
+def test_read_auth_status_claude_reads_stdout_json(tmp_path):
+    path = _fake_cli(tmp_path, 'print(\'{"loggedIn": true, "authMethod": "claude.ai"}\')')
+    assert session.read_auth_status("claude", path) == (True, "logged in (claude.ai)")

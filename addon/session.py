@@ -374,6 +374,14 @@ def parse_auth_status(provider: str, returncode: int, out: str) -> tuple:
     return ok, f"logged in ({st.get('authMethod', '?')})" if ok else "logged out"
 
 
+def read_auth_status(provider: str, path: str, timeout: float = 20) -> tuple:
+    """Run the provider's status command -> (logged_in, text). Codex prints its status on stderr."""
+    r = subprocess.run(auth_status_command(provider, path), capture_output=True, text=True,
+                       timeout=timeout, stdin=subprocess.DEVNULL)
+    out = r.stdout if r.stdout.strip() else r.stderr
+    return parse_auth_status(provider, r.returncode, out)
+
+
 def auth_command(provider: str, path: str, action: str) -> list:
     """action: login | logout."""
     return [path, action] if provider == "codex" else [path, "auth", action]

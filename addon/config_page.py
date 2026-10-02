@@ -9,8 +9,7 @@ import threading
 from aqt import mw
 
 from . import config_ops
-from .session import (PROVIDER_LABELS, auth_command, auth_status_command, find_cli, make_backend,
-                      parse_auth_status)
+from .session import PROVIDER_LABELS, auth_command, find_cli, make_backend, read_auth_status
 
 STATE = "aiStudyConfig"
 
@@ -179,9 +178,7 @@ class ConfigPage:
 
         def work():
             try:
-                r = subprocess.run(auth_status_command(provider, path), capture_output=True, text=True,
-                                   timeout=20, stdin=subprocess.DEVNULL)
-                ok, text = parse_auth_status(provider, r.returncode, r.stdout)
+                ok, text = read_auth_status(provider, path)
             except Exception as e:  # missing binary, bad JSON, timeout — show it, don't crash the page
                 ok, text = False, f"unknown ({e.__class__.__name__}: {e})"
             mw.taskman.run_on_main(lambda: self._set_auth(ok, text))
