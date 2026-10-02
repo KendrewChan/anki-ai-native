@@ -33,6 +33,10 @@ CSS = """
 .ai-you { opacity: 0.75; white-space: pre-wrap; margin: 0.2em 0; }
 .ai-you.ai-you-wrong { color: #d33; opacity: 1; } .ai-you.ai-you-partial { color: #d97706; opacity: 1; }
 .ai-model { color: #27864a; }
+#ai-edit { text-align: left; width: min(92vw, 70em); box-sizing: border-box; margin: 0 auto 0.6em; }
+#ai-edit input { width: 100%; box-sizing: border-box; padding: 0.45em 0.6em; font: inherit; font-size: 0.9em;
+                 border-radius: 6px; border: 1px solid #8888; background: transparent; color: inherit; }
+#ai-edit-status { font-size: 0.85em; opacity: 0.75; min-height: 1.1em; margin-top: 0.2em; }
 .ai-verdict ul { margin: 0.3em 0 0 1.2em; padding: 0; }
 </style>
 """
@@ -148,7 +152,42 @@ def question_html(original: str, rewrite: bool) -> str:
     return f'{CSS}<div id="ai-study">{orig}<div id="ai-items">{item}</div><div id="ai-status"></div></div>{js}'
 
 
-def verdict_html(verdict: dict, questions: list, answers: list) -> str:
+EDIT_JS = """
+<script>
+(function () {
+  const box = document.querySelector("#ai-edit input");
+  const status = document.getElementById("ai-edit-status");
+  box.addEventListener("keydown", function (e) {
+    e.stopPropagation();  // keep Anki's keys (1-4, space, e…) out of the box
+    if (e.key === "Escape") { box.blur(); return; }
+    if (e.key !== "Enter" || e.isComposing || !box.value.trim()) return;
+    e.preventDefault();
+    pycmd("aiStudy:edit:" + box.value.trim());
+    box.value = ""; box.disabled = true;
+    status.className = ""; status.textContent = "Editing the note…";
+  });
+})();
+</script>
+"""
+
+
+def edit_bar_html(status=None) -> str:
+    """Answer-side box to ask the AI to change this note. status = (text, is_error) of the last edit, or None."""
+    text, err = status or ("", False)
+    cls = ' class="ai-err"' if err else ""
+    return (f'<div id="ai-edit"><input placeholder="Ask AI to change this note — e.g. fix a typo, add a detail '
+            f'(Enter)"><div id="ai-edit-status"{cls}>{html.escape(text)}</div></div>{EDIT_JS}')
+
+
+def edit_status_js(text: str, err: bool) -> str:
+    """Show an edit result in the open answer side and re-enable the box."""
+    return ("(function(s, b){ if (!s) return; "
+            f"s.textContent = {json.dumps(text)}; s.className = {json.dumps('ai-err' if err else '')}; "
+            "if (b) { b.disabled = false; b.focus(); } })"
+            "(document.getElementById('ai-edit-status'), document.querySelector('#ai-edit input'));")
+
+
+def verdict_html(verdict: dict, questions: list, answers: list, edit_status=None) -> str:
     """questions = what was asked (may be empty: cloze / ask failed); answers = one per box."""
     v = verdict["verdict"]
     marks = {"correct": "✓", "partial": "~", "wrong": "✗"}
@@ -170,7 +209,7 @@ def verdict_html(verdict: dict, questions: list, answers: list) -> str:
         if missed else "<b>Missed:</b> nothing"
     )
     return (
-        f'{CSS}<div class="ai-verdict"><span class="ai-badge ai-{v}">{v.upper()}</span>'
+        f'{CSS}{edit_bar_html(edit_status)}<div class="ai-verdict"><span class="ai-badge ai-{v}">{v.upper()}</span>'
         f'{"".join(rows)}'
         f"<div style='margin-top:0.5em'>{html.escape(verdict['feedback'])}</div>"
         f"<div style='margin-top:0.5em'>{missed_part}</div></div>"

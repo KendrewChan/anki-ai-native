@@ -25,6 +25,7 @@ class State:
     def __init__(self):
         self.enabled = bool(state.get("ui", "ai_study"))  # AI Study mode; as the user last left it
         self.session = None
+        self.edit_session = None  # separate CLI for "change this note" requests on the answer side
         self.cwd = None
         self.page = None
         self.gen_page = None
@@ -36,6 +37,7 @@ class State:
         self.card_id = None
         self.ctx = {}  # card_id -> {"q", "a", "questions"}
         self.verdicts = {}  # card_id -> (verdict, questions, answers)
+        self.edit_status = {}  # card_id -> (text, is_error) of the last note edit
         self.failures = 0
         self.disabled = None  # reason string once AI is off for this session
 
@@ -53,6 +55,13 @@ def session():
         S.cwd = S.cwd or tempfile.mkdtemp(prefix="anki_ai_")
         S.session = make_backend(c, grading.system_prompt(c.get("custom")), S.cwd, mw.taskman.run_on_main)
     return S.session
+
+
+def edit_session():
+    if S.edit_session is None:
+        S.cwd = S.cwd or tempfile.mkdtemp(prefix="anki_ai_")
+        S.edit_session = make_backend(cfg(), grading.EDIT_SYSTEM_PROMPT, S.cwd, mw.taskman.run_on_main)
+    return S.edit_session
 
 
 def active(card=None) -> bool:
@@ -97,7 +106,7 @@ def on_card_will_show(text: str, card, kind: str) -> str:
     if kind == "reviewQuestion" and active(card):
         return ui.question_html(text, rewrite_enabled(card))
     if kind == "reviewAnswer" and card.id in S.verdicts:
-        return ui.verdict_html(*S.verdicts[card.id]) + ui.model_answer_html(text)
+        return ui.verdict_html(*S.verdicts[card.id], S.edit_status.get(card.id)) + ui.model_answer_html(text)
     return text
 
 
@@ -146,6 +155,8 @@ def on_js_message(handled, message: str, context):
             mw.reviewer._showAnswer()
     elif message.startswith("aiStudy:submit:"):
         submit(message[len("aiStudy:submit:"):])
+    elif message.startswith("aiStudy:edit:"):
+        edit_note(message[len("aiStudy:edit:"):])
     return (True, None)
 
 
@@ -173,6 +184,50 @@ def submit(payload: str):
     session().request(card_id, prompt, grading.parse_grade, cfg().get("grade_timeout_s", 60), on_graded)
 
 
+def edit_note(request: str):
+    """Answer side, after grading: ask the AI to change this card's note, then save it (one undo step)."""
+    card = mw.reviewer.card
+    if card is None or card.id not in S.verdicts:
+        return
+    verdict, questions, answers = S.verdicts[card.id]
+    note = card.note()
+    cid, nid = card.id, note.id
+    prompt = grading.edit_prompt(dict(note.items()), request, questions, answers, verdict, deck_rules(card, cfg()))
+
+    def on_edited(_cid, result, err):
+        if err:
+            show_edit_status(cid, f"Edit failed: {err.message}", True)  # not counted toward disabling AI Study
+            return
+        note = mw.col.get_note(nid)  # fresh: the Missed append may have saved in the meantime
+        changes, unknown = grading.plan_field_edit(dict(note.items()), result["fields"])
+        reply = result["reply"] or ("Done." if changes else "No change.")
+        if unknown:
+            reply += f" (ignored unknown fields: {', '.join(unknown)})"
+        if not changes:
+            show_edit_status(cid, reply, bool(unknown))
+            return
+        for name, value in changes.items():
+            note[name] = value
+        done = f"{reply} Changed: {', '.join(changes)} — Edit → Undo reverts it."
+        S.edit_status[cid] = (done, False)
+        (
+            # No initiator: the reviewer sees a note change and redraws the card with the new text.
+            update_note(parent=mw, note=note)
+            .success(lambda _: show_edit_status(cid, done, False))
+            .failure(lambda e: show_edit_status(cid, f"Not saved: {e}", True))
+            .run_in_background()
+        )
+
+    edit_session().request(cid, prompt, grading.parse_edit_reply, cfg().get("grade_timeout_s", 60), on_edited)
+
+
+def show_edit_status(card_id, text: str, err: bool):
+    """Remember the edit result for redraws, and show it now if that card's answer is still on screen."""
+    S.edit_status[card_id] = (text, err)
+    if card_id == S.card_id and mw.reviewer.state == "answer":
+        eval_card(ui.edit_status_js(text, err))
+
+
 def append_missed(missed: list):
     """Replace the card's Missed section with this review's misses (or "nothing") + today's date."""
     if not config_ops.toggle_on(cfg(), "missed_append"):
@@ -197,9 +252,10 @@ def on_show_answer(card):
 
 def end_session(*_args):
     """Leaving the reviewer or closing the profile: kill the process; the next session rebuilds it from config."""
-    if S.session is not None:
-        S.session.close()
-        S.session = None
+    for name in ("session", "edit_session"):
+        if getattr(S, name) is not None:
+            getattr(S, name).close()
+            setattr(S, name, None)
     S.reset()
 
 

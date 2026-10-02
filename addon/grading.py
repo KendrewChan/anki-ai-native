@@ -170,3 +170,35 @@ def pick_missed_field(field_names: list):
         if name in field_names:
             return name
     return field_names[-1] if field_names else None
+
+EDIT_SYSTEM_PROMPT = """You edit one Anki note at a time, on the user's request, right after they reviewed it. Every message is independent: it gives the note's fields (raw HTML), what the user was asked and answered, the grade, and the user's request. Never touch any other note.
+
+Change only what the request asks for; keep each field's existing HTML style. A field may end with a "Missed (date)" section the add-on maintains — leave it as it is unless the user asks about it. If the request is unclear, or asks for nothing about the note, change nothing and say why in "reply".
+
+Reply with JSON only, no code fences:
+{"reply": "<one short sentence to the user>", "fields": {"<field name>": "<the whole new field HTML>", ...}}
+Include only the fields you change; {} for none."""
+
+
+def edit_prompt(fields: dict, request: str, questions: list, answers: list, verdict: dict,
+                deck_rules: list = ()) -> str:
+    """fields: field name -> raw HTML of the note right now."""
+    note = "\n\n".join(f"[{name}]\n{value}" for name, value in fields.items())
+    asked = questions or ["(the card's own question)"]
+    pairs = "\n".join(f"Q: {q}\nUser: {a.strip() or '(blank)'}" for q, a in zip(asked, _pad(answers, len(asked))))
+    return (f"NOTE FIELDS\n\n{note}{deck_rules_block(deck_rules)}\n\nReview:\n{pairs}\n"
+            f"Grade: {verdict.get('verdict')} — {verdict.get('feedback', '')}\n\nUser's request:\n{request}")
+
+
+def parse_edit_reply(text: str) -> dict:
+    obj = parse_json_reply(text)
+    fields = obj.get("fields") or {}
+    if not isinstance(fields, dict):
+        raise ValueError("'fields' is not an object")
+    return {"reply": str(obj.get("reply", "")).strip(), "fields": {str(k): str(v) for k, v in fields.items()}}
+
+
+def plan_field_edit(current: dict, proposed: dict) -> tuple:
+    """(changes, rejected): changes = fields that exist and actually differ; rejected = unknown field names."""
+    changes = {k: v for k, v in proposed.items() if k in current and v != current[k]}
+    return changes, [k for k in proposed if k not in current]

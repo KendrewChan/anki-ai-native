@@ -157,3 +157,29 @@ def test_replace_missed_clean_review_still_records_date():
 def test_replace_missed_tolerates_editor_reformatting_and_keeps_other_hr():
     back = "A<hr>B\n<hr />\n<b> Missed (2026-09-26) </b>\n<ul>\n<li>old</li>\n</ul>"
     assert grading.replace_missed(back, ["n"], "D") == "A<hr>B<hr><b>Missed (D)</b><ul><li>n</li></ul>"
+
+
+def test_edit_prompt_has_fields_review_and_request():
+    v = {"verdict": "wrong", "feedback": "Missed the key part."}
+    p = grading.edit_prompt({"Front": "Q?", "Back": "<b>A</b>"}, "fix the typo", ["Q1"], ["my ans"], v,
+                            [("Deck", "be terse")])
+    assert "[Front]\nQ?" in p and "[Back]\n<b>A</b>" in p and "Q: Q1\nUser: my ans" in p
+    assert "Grade: wrong — Missed the key part." in p and p.endswith("fix the typo") and "be terse" in p
+
+
+def test_parse_edit_reply_and_plan():
+    r = grading.parse_edit_reply('```json\n{"reply": "Fixed.", "fields": {"Back": "B2", "Nope": "x", "Front": "Q"}}\n```')
+    assert r["reply"] == "Fixed."
+    changes, unknown = grading.plan_field_edit({"Front": "Q", "Back": "B"}, r["fields"])
+    assert changes == {"Back": "B2"} and unknown == ["Nope"]
+    assert grading.parse_edit_reply('{"reply": "Unclear."}') == {"reply": "Unclear.", "fields": {}}
+    with pytest.raises(ValueError):
+        grading.parse_edit_reply('{"fields": ["x"]}')
+
+
+def test_verdict_html_has_edit_bar_with_status():
+    v = {"verdict": "correct", "ease": 3, "feedback": "f", "missed": [], "per_question": []}
+    html = ui.verdict_html(v, [], ["a"], ("Not saved: <x>", True))
+    assert html.index('id="ai-edit"') < html.index('class="ai-verdict"')
+    assert '<div id="ai-edit-status" class="ai-err">Not saved: &lt;x&gt;</div>' in html
+    assert 'id="ai-edit-status">' in ui.verdict_html(v, [], ["a"])
