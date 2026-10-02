@@ -14,6 +14,10 @@ Uses your own logged-in `claude` or `codex` CLI; no API keys.
 
 <img src="docs/images/home.png" alt="Anki deck list with AI Study, Settings and Generate/Update Cards links" width="600">
 
+**AI Study** — while reviewing, the card becomes sharp questions, each with its own answer box. **Show original** reveals the real card.
+
+<img src="docs/images/review.png" alt="Reviewing a card: four sharp questions with answer boxes" width="600">
+
 **⚙ Settings** — tell the AI what to change; current configuration, rules and deck prompts below.
 
 <img src="docs/images/settings.png" alt="AI Study settings page" width="600">
