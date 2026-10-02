@@ -170,6 +170,6 @@ def test_toggle_flips_and_defaults_on():
     with pytest.raises(KeyError):
         config_ops.toggle_change({}, "provider")
     for key, (label, tip) in config_ops.TOGGLES.items():
-        assert key in config_ops.SETTINGS and label and len(tip) > 40
+        assert key in config_ops.SETTINGS and label and len(tip) >= 2 and all(len(line) > 20 for line in tip)
     new, log, _, hist = apply([config_ops.toggle_change(BASE, "missed_append")])
     assert new["missed_append"] is False and log == ["✓ missed_append: true → false"] and hist == [BASE]

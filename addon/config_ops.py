@@ -21,16 +21,16 @@ SETTINGS = {
     "codex_path": "absolute path to the codex CLI executable, or \"\" to auto-detect",
 }
 
-# On/off settings shown as toggle buttons on the settings page: key -> (label, tooltip). A missing key = on.
+# On/off settings shown as toggle buttons on the settings page: key -> (label, tooltip lines). A missing key = on.
 TOGGLES = {
-    "sharp_questions": ("Sharp questions",
-                        "On: before you answer, the AI rewrites each card into sharp, concrete questions. "
-                        "Off: you answer the card's own question as written (faster: one AI call per card). "
-                        "Cloze cards always use their own question."),
-    "missed_append": ("Missed append",
-                      "On: after each graded review, what you missed is written onto the card's Back as one "
-                      "\"Missed (date)\" section, replacing the previous one, so the answer side shows your latest gaps. "
-                      "Off: cards are never changed."),
+    "sharp_questions": ("Sharp questions", (
+        "On: before you answer, the AI rewrites each card into sharp, concrete questions.",
+        "Off: you answer the card's own question as written (faster: one AI call per card).",
+        "Cloze cards always use their own question.")),
+    "missed_append": ("Missed append", (
+        "On: after each graded review, what you missed is written onto the card's Back as one "
+        "\"Missed (date)\" section, replacing the previous one, so the answer side shows your latest gaps.",
+        "Off: cards are never changed.")),
 }
 
 

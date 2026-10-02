@@ -35,10 +35,19 @@ CSS = """
 #status { font-size: 0.85em; opacity: 0.7; min-height: 1.3em; margin: 0.3em 0 0.8em; }
 .sect h3 { margin: 1em 0 0.3em; font-size: 1em; text-transform: uppercase; letter-spacing: 0.05em; opacity: 0.7; }
 .sect table { border-collapse: collapse; } .sect td { padding: 0.15em 1.2em 0.15em 0; vertical-align: top; }
-.sect td.k { opacity: 0.7; } .sect ol { margin: 0.2em 0 0 1.4em; padding: 0; }
+.sect td.k .kl { opacity: 0.7; } .sect ol { margin: 0.2em 0 0 1.4em; padding: 0; }
 .sect button { margin-left: 0.6em; } .sect select { font: inherit; }
 .sect button.tog { margin-left: 0; min-width: 3.6em; } .sect button.tog.on { color: #27864a; font-weight: 600; }
-.sect td.k span[title] { cursor: help; border-bottom: 1px dotted #8888; }
+.help { position: relative; display: inline-block; width: 1.25em; height: 1.25em; line-height: 1.2em; margin-left: 0.4em;
+        border: 1px solid #8889; border-radius: 50%; font-size: 0.75em; font-weight: 600; text-align: center;
+        cursor: help; vertical-align: 0.15em; outline: none; }
+.help:hover, .help:focus { z-index: 20; border-color: #3b82f6; }
+.help .tip { display: none; position: absolute; top: calc(100% + 6px); left: -0.6em; z-index: 10; width: max-content;
+             max-width: 22em; white-space: normal; text-align: left; font-size: 1.25em; font-weight: 400; line-height: 1.4;
+             padding: 0.5em 0.75em; border-radius: 6px; background: #2b2b2b; color: #eee; border: 1px solid #8886;
+             box-shadow: 0 3px 12px #0006; }
+.help .tip div + div { margin-top: 0.35em; }
+.help:hover .tip, .help:focus .tip { display: block; }
 .tree { font-size: 0.95em; } .tree details, .tree .leaf { margin-left: 1.1em; }
 .tree > details, .tree > .leaf { margin-left: 0; }
 .tree summary { cursor: pointer; } .tree .leaf { padding-left: 1em; }
@@ -413,7 +422,8 @@ class ConfigPage:
         path = cfg.get(f"{provider}_path") or ""
         rows.append((f"{PROVIDER_LABELS[provider]} path",
                      html.escape(path if path and path != "auto" else f"auto → {found}")))
-        table = "".join(f'<tr><td class="k">{k}</td><td>{v}</td></tr>' for k, v in rows)
+        table = "".join(f'<tr><td class="k"><span class="kl">{k}</span>{"".join(h)}</td><td>{v}</td></tr>'
+                        for k, v, *h in rows)
         custom = cfg.get("custom") or []
         rules = ("<ol>" + "".join(f"<li>{html.escape(r)}</li>" for r in custom) + "</ol>"
                  if custom else '<div style="opacity:.6">none yet</div>')
@@ -422,12 +432,14 @@ class ConfigPage:
                 f'<div class="sect"><h3>Deck Prompts</h3>{self._deck_html(cfg)}</div>')
 
     def _toggle_row(self, cfg, key) -> tuple:
+        """(label, On/Off button, ? help bubble — shown on hover, or on click/tab for focus)."""
         label, tip = config_ops.TOGGLES[key]
-        tip = html.escape(tip, quote=True)
         on = config_ops.toggle_on(cfg, key)
-        button = (f'<button class="tog{" on" if on else ""}" title="{tip}" '
+        button = (f'<button class="tog{" on" if on else ""}" '
                   f'onclick="pycmd(\'aiCfg:toggle:{key}\')">{"On" if on else "Off"}</button>')
-        return f'<span title="{tip}">{label}</span>', button
+        lines = "".join(f"<div>{html.escape(line)}</div>" for line in tip)
+        return label, button, f'<span class="help" tabindex="0">?<span class="tip">{lines}</span></span>'
+
 
     def _deck_html(self, cfg) -> str:
         decks = self._decks()

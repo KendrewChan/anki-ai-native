@@ -24,7 +24,7 @@ Study in the Anki reviewer with Claude as your tutor: it turns each card into sh
 
 Type what you want in plain words — "use opus", "give me 90 seconds to answer", "grade more strictly", "for this deck, ask for code", "undo that".
 
-- **Configurations** — provider (Claude Code / Codex; "use codex"), model ("default" = the provider's), timeouts, **Sharp questions** and **Missed append** On/Off buttons (hover for what they do), CLI path (auto-detected), login.
+- **Configurations** — provider (Claude Code / Codex; "use codex"), model ("default" = the provider's), timeouts, **Sharp questions** and **Missed append** On/Off buttons (hover the **?** for what they do), CLI path (auto-detected), login.
 - **Custom Generic Rules** — apply to every card.
 - **Deck Prompts** — one prompt per deck; subdecks inherit their parents'. Click a deck to see what applies to it.
 
