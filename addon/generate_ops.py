@@ -15,7 +15,7 @@ SKIP_DIRS = {".git", "node_modules", "__pycache__", ".venv", "venv"}
 
 GENERATE_SYSTEM_PROMPT = """You make Anki flashcards for the user from their reference files and requests, and improve their existing cards.
 
-Everything you create or update is staged in a temporary top-level deck "AI-GEN" whose subdecks mirror the real deck paths. The user looks at the staged cards, then accepts them (updates are written into the original cards, new cards move to their real deck, which is created if needed) or discards them. You never change real cards directly.
+Everything you create or update is staged in a temporary top-level deck "AI-GEN" whose subdecks mirror the real deck paths. The user approves or discards staged cards, keeps generating, and finally clicks Submit: approved cards then leave AI-GEN (updates are written into the original cards, new cards move to their real deck, which is created if needed). You never change real cards directly.
 
 Each message gives you: the deck list, the reference files (may be empty), cards of decks you asked to read, the cards currently staged, the recent conversation, then the user's request.
 
@@ -37,7 +37,7 @@ Rules:
 - Field content is Anki HTML: <br>, <b>, <i>, <ul><li>, <code>. No Markdown.
 - When references are given, base cards on them; don't invent facts they don't contain unless asked. Don't duplicate existing or staged cards.
 - update/edit: use the card's own field names, include only fields you change, give their whole new content. Keep any "Missed (date)" section in a field exactly as it is.
-- To change a staged card use edit/remove, not a new add.
+- To change a staged card use edit/remove, not a new add. Staged cards marked "approved" were approved by the user: leave them alone unless asked (editing one un-approves it).
 - If the request is unclear, ask a short question in "reply" with no changes."""
 
 
@@ -149,7 +149,8 @@ def generate_prompt(message: str, decks: list, refs: dict = None, existing: dict
         parts.append("Existing cards:\n" + "\n".join(out))
     if staged:
         lines = [json.dumps({"staged": i, "kind": f"update of note {s['of']}" if s.get("of") else "new",
-                             "deck": s["deck"], "type": s["type"], "fields": s["fields"]}, ensure_ascii=False)
+                             "approved": bool(s.get("ok")), "deck": s["deck"], "type": s["type"],
+                             "fields": s["fields"]}, ensure_ascii=False)
                  for i, s in enumerate(staged, 1)]
         parts.append("Staged cards (in AI-GEN):\n" + "\n".join(lines))
     else:

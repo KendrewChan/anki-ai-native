@@ -61,13 +61,16 @@ def test_stage_accept(col):
     stage(col, [{"update": {"note_id": orig["id"], "fields": {"Back": "Mitochondria!"}}}])
     assert len(gc.staged(col)) == 3
 
-    _, counts = gc.accept(col)
+    _, counts = gc.submit(col)
+    assert counts == {"updated": 0, "added": 0}  # nothing approved yet: Submit ports nothing
+    assert gc.approve(col)[1] == 3
+    _, counts = gc.submit(col)
     assert counts == {"updated": 1, "added": 2}
     assert col.get_note(orig["id"])["Back"] == "Mitochondria!" and col.get_note(orig["id"]).tags == ["bio"]
     assert not any(n.startswith("AI-GEN") for n in decks(col)) and "Biology::Ch4" in decks(col)
     cards = gc.read_deck(col, "Biology")
     assert len(cards) == 3 and {c["deck"] for c in cards} == {"Biology::Ch3", "Biology::Ch4"}
-    assert all(gc.TAG not in col.get_note(c["id"]).tags for c in cards)
+    assert all(not {gc.TAG, gc.OK} & set(col.get_note(c["id"]).tags) for c in cards)
 
 
 def test_edit_remove_discard_undo(col):
@@ -83,14 +86,26 @@ def test_edit_remove_discard_undo(col):
     assert len(gc.staged(col)) == 1
 
 
-def test_accept_one_card_leaves_the_rest(col):
+def test_approve_some_keep_generating_then_submit(col):
     stage(col, [{"add": {"deck": "Physics::Waves", "front": "c?", "back": "speed of light"}},
                 {"add": {"deck": "Biology", "front": "a", "back": "b"}}])
     physics = [s["id"] for s in gc.staged(col) if s["deck"] == "Physics::Waves"]
-    _, counts = gc.accept(col, physics)
+    assert gc.approve(col, physics)[1] == 1
+    stage(col, [{"add": {"deck": "Chem", "front": "x", "back": "y"}}])  # generate more after approving
+    assert {s["deck"]: s["ok"] for s in gc.staged(col)} == {"Biology": False, "Chem": False, "Physics::Waves": True}
+    _, counts = gc.submit(col)
     assert counts == {"updated": 0, "added": 1}
-    assert "Physics::Waves" in decks(col) and "AI-GEN::Physics::Waves" not in decks(col)
-    assert "AI-GEN::Physics" not in decks(col)  # emptied parent removed too
-    assert [s["deck"] for s in gc.staged(col)] == ["Biology"] and "AI-GEN::Biology" in decks(col)
+    assert "Physics::Waves" in decks(col) and "AI-GEN::Physics" not in decks(col)  # emptied parent removed too
+    assert sorted(s["deck"] for s in gc.staged(col)) == ["Biology", "Chem"]  # unapproved stay staged
     _, n = gc.discard(col, [gc.staged(col)[0]["id"]])
-    assert n == 1 and col.decks.id_for_name("AI-GEN") is None  # AI-GEN gone once empty
+    assert n == 1 and [s["deck"] for s in gc.staged(col)] == ["Chem"]
+
+
+def test_ai_edit_unapproves(col):
+    stage(col, [{"add": {"deck": "Biology", "front": "a", "back": "b"}}])
+    gc.approve(col)
+    stage(col, [{"edit": {"staged": 1, "fields": {"Back": "B"}}}])
+    assert gc.staged(col)[0]["ok"] is False
+    gc.approve(col)
+    gc.approve(col, ok=False)
+    assert gc.staged(col)[0]["ok"] is False

@@ -1,9 +1,10 @@
-"""Generate: stage, list, accept, discard cards in the "AI-GEN" deck. Takes an anki Collection; no aqt."""
+"""Generate: stage, list, approve, submit, discard cards in the "AI-GEN" deck. Takes an anki Collection; no aqt."""
 
 from .generate_ops import TEMP_DECK
 
 TAG = "ai_generate"
 OF = "ai_generate_of_"  # + original note id, on a staged copy that updates that note
+OK = "ai_generate_ok"  # staged card the user approved; Submit ports only these
 CLOZE = 1  # notetype["type"] of cloze note types
 
 
@@ -34,7 +35,7 @@ def read_deck(col, name: str) -> list:
 
 
 def staged(col) -> list:
-    """Staged notes, sorted by real deck: note dict with "deck" = real deck (prefix removed) and "of"."""
+    """Staged notes, sorted by real deck: note dict with "deck" = real deck (prefix removed), "of", "ok"."""
     if col.decks.id_for_name(TEMP_DECK) is None:
         return []
     out = []
@@ -43,6 +44,7 @@ def staged(col) -> list:
         d = _note_dict(col, note)
         d["deck"] = d["deck"][len(TEMP_DECK) + 2:]  # "" when sitting in AI-GEN itself
         d["of"] = _original_of(note)
+        d["ok"] = OK in note.tags
         out.append(d)
     return sorted(out, key=lambda d: (d["deck"].lower(), d["id"]))
 
@@ -88,6 +90,7 @@ def apply_ops(col, ops) -> tuple:
                 copy.tags = list(src.tags) + [TAG, f"{OF}{src.id}"]
             for k, v in fields.items():
                 copy[k] = v
+            copy.tags = [t for t in copy.tags if t != OK]  # changed by the AI: needs a fresh look
             if copy.id:
                 col.update_note(copy)
             else:
@@ -99,6 +102,7 @@ def apply_ops(col, ops) -> tuple:
             note = col.get_note(nid)
             for k, v in fields.items():
                 note[k] = v
+            note.tags = [t for t in note.tags if t != OK]
             col.update_note(note)
             counts["edited"] += 1
         elif op[0] == "remove":
@@ -116,16 +120,30 @@ def _cleanup(col):
             col.decks.remove([did])
 
 
-def accept(col, ids=None) -> tuple:
-    """Port staged cards out of AI-GEN (all, or the staged note ids given): updates -> written into the original notes,
-    new cards -> their real deck (created if missing). Emptied AI-GEN decks are removed. One undo step."""
+def approve(col, ids=None, ok: bool = True) -> tuple:
+    """Mark staged cards (all, or the note ids given) approved — or not, with ok=False. They stay in AI-GEN."""
+    pos = col.add_custom_undo_entry(f"{'Approve' if ok else 'Unapprove'} {TEMP_DECK} cards")
+    notes = []
+    for s in staged(col):
+        if (ids is None or s["id"] in ids) and s["ok"] != ok:
+            note = col.get_note(s["id"])
+            note.tags = [t for t in note.tags if t != OK] + ([OK] if ok else [])
+            notes.append(note)
+    if notes:
+        col.update_notes(notes)
+    return col.merge_undo_entries(pos), len(notes)
+
+
+def submit(col) -> tuple:
+    """Port the approved cards out of AI-GEN: updates -> written into the original notes, new cards -> their real deck
+    (created if missing). Cards not approved stay staged. Emptied AI-GEN decks are removed. One undo step."""
     from anki.errors import NotFoundError
 
-    pos = col.add_custom_undo_entry(f"Accept {TEMP_DECK}")
+    pos = col.add_custom_undo_entry(f"Submit {TEMP_DECK}")
     counts = {"updated": 0, "added": 0}
     drop = []
     for s in staged(col):
-        if ids is not None and s["id"] not in ids:
+        if not s["ok"]:
             continue
         note = col.get_note(s["id"])
         orig = None
@@ -143,7 +161,7 @@ def accept(col, ids=None) -> tuple:
             counts["updated"] += 1
         else:
             col.set_deck(note.card_ids(), col.decks.id(s["deck"] or "Default", create=True))
-            note.tags = [t for t in note.tags if t != TAG and not t.startswith(OF)]
+            note.tags = [t for t in note.tags if t not in (TAG, OK) and not t.startswith(OF)]
             col.update_note(note)
             counts["added"] += 1
     if drop:

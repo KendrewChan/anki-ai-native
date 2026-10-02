@@ -32,6 +32,8 @@ CSS = CONFIG_CSS + """
 .stg .main { flex: 1; min-width: 0; } .stg .q { white-space: pre-wrap; overflow-wrap: anywhere; }
 .stg .plain { padding-left: 1.05em; } .stg .acts { white-space: nowrap; }
 .stg .acts button { font-size: 0.8em; margin-left: 0.3em; }
+.stg .card.ok .q { opacity: 0.75; } .stg .okmark { color: #27864a; font-size: 0.8em; font-weight: 600; }
+.stg .btns .submit { font-weight: 700; margin-left: 1em; } .stg .hint { font-size: 0.8em; opacity: 0.6; margin-top: 0.3em; }
 #status.busy { opacity: 1; font-size: 0.95em; color: #2a6fd6; }
 .stg summary { cursor: pointer; }
 .stg .kind { font-size: 0.75em; padding: 0 0.35em; border-radius: 4px; border: 1px solid #8888; margin-right: 0.4em; }
@@ -141,9 +143,14 @@ class GeneratePage:
             self._update(None)
         elif message in ("aiGen:pickdir", "aiGen:pickfile"):
             self._pick(message == "aiGen:pickdir")
-        elif message.startswith("aiGen:accept") and not self.busy:
-            ids = _ids(message[len("aiGen:accept:"):]) if message != "aiGen:accept" else None
-            self._run_op(lambda col: _Result(generate_col.accept(col, ids)), self._accepted)
+        elif message.startswith("aiGen:approve") and not self.busy:
+            ids = _ids(message[len("aiGen:approve:"):]) if message != "aiGen:approve" else None
+            self._run_op(lambda col: _Result(generate_col.approve(col, ids)), lambda _n: self._update(None))
+        elif message.startswith("aiGen:unapprove:") and not self.busy:
+            ids = _ids(message[len("aiGen:unapprove:"):])
+            self._run_op(lambda col: _Result(generate_col.approve(col, ids, ok=False)), lambda _n: self._update(None))
+        elif message == "aiGen:submit" and not self.busy:
+            self._run_op(lambda col: _Result(generate_col.submit(col)), self._submitted)
         elif message.startswith("aiGen:discard") and not self.busy:
             ids = _ids(message[len("aiGen:discard:"):]) if message != "aiGen:discard" else None
             self._run_op(lambda col: _Result(generate_col.discard(col, ids)),
@@ -237,10 +244,13 @@ class GeneratePage:
 
         CollectionOp(parent=mw, op=op).success(lambda r: on_done(r.info)).failure(failed).run_in_background()
 
-    def _accepted(self, counts):
-        self.loaded = {}
-        self.say(f"Accepted: {counts['updated']} card{'s' if counts['updated'] != 1 else ''} updated, "
-                 f"{counts['added']} added to their decks. Edit → Undo reverses this.")
+    def _submitted(self, counts):
+        self.loaded = {}  # real decks changed: the AI re-reads them when needed
+        left = len(generate_col.staged(mw.col))
+        self.say(f"Submitted: {counts['updated']} card{'s' if counts['updated'] != 1 else ''} updated, "
+                 f"{counts['added']} added to their decks."
+                 + (f" {left} unapproved card{'s' if left != 1 else ''} still in {generate_ops.TEMP_DECK}." if left else "")
+                 + " Edit → Undo reverses this.")
 
     # --- rendering ---
 
@@ -275,7 +285,7 @@ class GeneratePage:
         if not self.replies:
             return ('<div class="ai">Tell me what cards to make or fix — e.g. "10 cards from these notes into '
                     'Biology::Ch3", "improve my Chem cards using this file", "make card 3 shorter". New and updated '
-                    'cards wait in the AI-GEN deck until you accept them.</div>')
+                    'cards wait in the AI-GEN deck until you approve and Submit them.</div>')
         return "".join(f'<div class="you">{html.escape(t)}</div>' if kind == "you"
                        else f'<div class="{kind}">&gt; {html.escape(t)}</div>' for t, kind in self.replies)
 
@@ -287,9 +297,12 @@ class GeneratePage:
         for i, s in enumerate(staged, 1):
             if s["deck"] != deck:
                 deck = s["deck"]
-                ids = ",".join(str(x["id"]) for x in staged if x["deck"] == deck)
-                out.append(f'<div class="deck">{html.escape(deck or "(no deck)")}<span class="acts">'
-                           f'<button onclick="pycmd(\'aiGen:accept:{ids}\')">Accept deck</button>'
+                in_deck = [x for x in staged if x["deck"] == deck]
+                ids = ",".join(str(x["id"]) for x in in_deck)
+                pending = ",".join(str(x["id"]) for x in in_deck if not x["ok"])
+                approve = (f'<button onclick="pycmd(\'aiGen:approve:{pending}\')">Approve deck</button>' if pending
+                          else f'<button onclick="pycmd(\'aiGen:unapprove:{ids}\')">Unapprove deck</button>')
+                out.append(f'<div class="deck">{html.escape(deck or "(no deck)")}<span class="acts">{approve}'
                            f'<button onclick="pycmd(\'aiGen:discard:{ids}\')">Discard deck</button></span></div>')
             kind = ('<span class="kind upd">UPDATE</span>' if s["of"] else '<span class="kind new">NEW</span>')
             values = list(s["fields"].items())
@@ -298,12 +311,20 @@ class GeneratePage:
                            for k, v in values[1:] if v.strip())  # the question is already in the summary
             body = (f'<details data-id="{s["id"]}"><summary>{question}</summary>{rest}</details>' if rest
                     else f'<div class="plain">{question}</div>')
-            acts = (f'<span class="acts"><button onclick="pycmd(\'aiGen:accept:{s["id"]}\')">Accept</button>'
+            approve = (f'<span class="okmark">✓ Approved</span>'
+                      f'<button onclick="pycmd(\'aiGen:unapprove:{s["id"]}\')">Unapprove</button>' if s["ok"]
+                      else f'<button onclick="pycmd(\'aiGen:approve:{s["id"]}\')">Approve</button>')
+            acts = (f'<span class="acts">{approve}'
                     f'<button onclick="pycmd(\'aiGen:discard:{s["id"]}\')">Discard</button></span>')
-            out.append(f'<div class="card"><div class="main">{body}</div>{acts}</div>')
-        n = len(staged)
-        buttons = (f'<div class="btns"><button onclick="pycmd(\'aiGen:accept\')">Accept all ({n})</button>'
-                   f'<button onclick="pycmd(\'aiGen:discard\')">Discard all</button></div>')
+            out.append(f'<div class="card{" ok" if s["ok"] else ""}"><div class="main">{body}</div>{acts}</div>')
+        ok = sum(1 for s in staged if s["ok"])
+        pending = len(staged) - ok
+        submit = (f'<button class="submit" onclick="pycmd(\'aiGen:submit\')">Submit {ok} approved</button>' if ok
+                  else '<button class="submit" disabled>Submit (approve cards first)</button>')
+        buttons = (f'<div class="btns">'
+                   + (f'<button onclick="pycmd(\'aiGen:approve\')">Approve all ({pending})</button>' if pending else "")
+                   + f'<button onclick="pycmd(\'aiGen:discard\')">Discard all</button>{submit}</div>'
+                   f'<div class="hint">Approved cards stay here until you Submit — keep generating meanwhile.</div>')
         return f'<div class="sect stg"><h3>{TEMP} — waiting for you</h3>{"".join(out)}{buttons}</div>'
 
     def _page_html(self) -> str:

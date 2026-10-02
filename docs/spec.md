@@ -153,3 +153,8 @@ Each graded review **replaces** the card's Missed section (in the field chosen b
 - Feedback: the user's message is echoed in the log; while the AI works the status shows "⏳ Thinking — this can take a minute… Ns" (live seconds, blue).
 - (later, same day) Accept / Discard moved from each deck heading to **each staged card** (by note id); Accept all / Discard all stay. A staged row shows the **full question** (first field, wrapped, never cut); expanding shows only the other fields, and a card with nothing else doesn't expand.
 - Deck headings keep **Accept deck / Discard deck** too (that deck's staged cards, sent as an id list) alongside the per-card buttons.
+
+### v1.9.2 — Approve, then Submit (2026-10-02)
+
+- **Approve** (card / deck / all) only marks staged cards (`ai_generate_ok` tag, ✓ Approved, **Unapprove** to undo); they stay in AI-GEN and the user keeps generating. **Submit N approved** ports only approved cards (updates → originals, new → real decks, created if needed); unapproved cards stay staged. **Discard** still deletes immediately. Every action is one undo step.
+- An AI `edit`/`update` of an approved staged card clears its approval, so the user sees the change before submitting. The AI sees `"approved"` on each staged card and is told to leave approved ones alone unless asked.
