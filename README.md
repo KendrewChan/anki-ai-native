@@ -8,6 +8,20 @@ An Anki add-on that turns Claude Code (or Codex) into a study tutor, right insid
 
 Uses your own logged-in `claude` or `codex` CLI; no API keys.
 
+## Screenshots
+
+**Home** — the add-on's links sit under the deck list.
+
+<img src="docs/images/home.png" alt="Anki deck list with AI Study, Settings and Generate/Update Cards links" width="600">
+
+**⚙ Settings** — tell the AI what to change; current configuration, rules and deck prompts below.
+
+<img src="docs/images/settings.png" alt="AI Study settings page" width="600">
+
+**✨ Generate/Update Cards** — new and updated cards wait in AI-GEN for you to approve, then submit.
+
+<img src="docs/images/generate.png" alt="Generate/Update Cards page with staged cards in AI-GEN" width="600">
+
 ## Install
 
 ```bash
