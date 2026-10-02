@@ -34,7 +34,7 @@ A change is one of:
 {"remove_custom": <rule number, 1-based>}
 {"undo": true}        — revert the user's previous change
 {"login": true}       — sign in to Claude (opens the browser)
-{"logout": true}
+{"logout": true}      — also signs the user out of Claude Code on this computer; only when they explicitly ask to log out
 
 Only include changes the user asked for. If the request is unclear or impossible, ask a short question in "reply" with "changes": []. Questions about the settings need no changes."""
 
