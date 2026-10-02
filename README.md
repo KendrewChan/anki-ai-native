@@ -28,6 +28,10 @@ Type what you want in plain words — "use opus", "give me 90 seconds to answer"
 - **Custom Generic Rules** — apply to every card.
 - **Deck Prompts** — one prompt per deck; subdecks inherit their parents'. Click a deck to see what applies to it.
 
+## When something breaks
+
+Open **⚙ Settings**: it checks your AI CLI on open. If something's wrong you get a plain explanation with buttons — **Update**, **Roll back** to the last version that worked, **Log in**, **Allow more time**, switch provider, or **Copy error report** to send to the author. For problems in the add-on itself it can offer **Try AI repair**: another AI proposes a small fix, you approve it, and it's checked and undone automatically if it doesn't work (**Revert AI repair** undoes it later).
+
 ## Notes
 
 - Each review session keeps one `claude` process running and uses your Claude plan's usage.

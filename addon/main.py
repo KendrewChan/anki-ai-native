@@ -12,7 +12,7 @@ from aqt.overview import Overview
 from aqt.qt import QAction
 from aqt.reviewer import Reviewer
 
-from . import config_ops, grading, ui
+from . import config_ops, grading, health, ui
 from .config_page import ConfigPage
 from .session import make_backend
 
@@ -77,7 +77,8 @@ def eval_card(js: str):
 
 
 def on_error(err) -> str:
-    """Apply the failure policy; return the message to show."""
+    """Apply the failure policy; return the message to show. Settings diagnoses the last error on open."""
+    health.LAST_ERROR[cfg().get("provider") or "claude"] = err.message
     if err.kind == "limit":
         S.disabled = f"Usage limit: {err.message}"
     elif err.kind in ("unavailable", "crashed", "error"):
@@ -85,10 +86,10 @@ def on_error(err) -> str:
         if S.failures >= 2:
             S.disabled = f"AI unavailable: {err.message}"
     if S.disabled:
-        return S.disabled + " — AI off until you reopen the reviewer."
+        return S.disabled + " — AI off until you reopen the reviewer. Open ⚙ Settings to fix it."
     if err.kind == "timeout":
         return "AI timed out."
-    return f"AI error: {err.message}"
+    return f"AI error: {err.message} — open ⚙ Settings to fix it."
 
 
 # --- hooks ---

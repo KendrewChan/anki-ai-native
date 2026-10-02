@@ -30,9 +30,9 @@ Reply with JSON only, no code fences:
 If you can't find a safe fix: {"summary": "<why>", "edits": []}"""
 
 
-def repair_prompt(error: str, provider: str, version: str, help_text: str) -> str:
+def repair_prompt(error: str, provider: str, version: str, help_text: str, root: str = ADDON_DIR) -> str:
     files = "\n\n".join(
-        f"=== {name} ===\n{open(os.path.join(ADDON_DIR, name), encoding='utf-8').read()}" for name in REPAIRABLE
+        f"=== {name} ===\n{open(os.path.join(root, name), encoding='utf-8').read()}" for name in REPAIRABLE
     )
     return (f"Error:\n{error}\n\nCLI: {provider} {version}\n\n`--help` output:\n{help_text[-6000:]}\n\n"
             f"Add-on source:\n{files}")

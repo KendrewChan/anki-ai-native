@@ -138,3 +138,10 @@ def test_repair_prompt_includes_error_help_and_source():
     p = repair.repair_prompt("unexpected argument '--disable'", "codex", "0.153.0", "Usage: codex exec ...")
     assert "unexpected argument" in p and "Usage: codex exec" in p and "=== session.py ===" in p
     assert "never just delete it" in repair.REPAIR_SYSTEM_PROMPT
+
+
+def test_load_patched_session_runs_code_from_disk(addon_copy, monkeypatch):
+    edit = {"file": "session.py", "old": 'PROVIDER_LABELS = {', "new": 'PATCHED_MARKER = True\nPROVIDER_LABELS = {'}
+    repair.apply([edit], addon_copy)
+    mod = repair.load_patched_session(addon_copy)
+    assert mod.PATCHED_MARKER is True and callable(mod.probe_model)
