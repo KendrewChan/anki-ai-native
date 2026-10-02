@@ -201,11 +201,11 @@ def test_config_prompt_shows_selected_deck_chain():
 
 def test_card_prompts_carry_deck_rules():
     rules = [("Coding", "scenarios"), ("Coding::Languages::Golang", "code")]
-    ask = grading.ask_prompt("Q", "A", rules)
+    ask = grading.ask_prompt("Q", rules)
     grade = grading.grade_prompt("Q", [], "A", ["mine"], rules)
     for p in (ask, grade):
         assert "Deck rules (outer → inner):\n- Coding: scenarios\n- Coding::Languages::Golang: code" in p
-    assert "Deck rules" not in grading.ask_prompt("Q", "A")
+    assert "Deck rules" not in grading.ask_prompt("Q")
 
 
 @pytest.mark.parametrize("value", ["", "auto", " AUTO "])

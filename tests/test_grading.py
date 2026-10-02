@@ -263,3 +263,9 @@ def test_deck_rules_override_defaults_and_can_show_original():
     assert grading.parse_questions('{"questions":["a"],"show_original":true}')["show_original"] is True
     assert grading.parse_questions('{"questions":["a"],"show_original":"yes"}')["show_original"] is False
     assert "Priority, highest first: deck rules" in grading.SYSTEM_PROMPT and "up to 8" in grading.SYSTEM_PROMPT
+
+
+def test_ask_prompt_sends_front_only():
+    p = grading.ask_prompt("Front?", [("Deck", "r")])
+    assert p.startswith("NEW CARD\n\nQuestion:\nFront?") and "Reference answer" not in p
+    assert "only the card's question (its front), never its answer" in grading.SYSTEM_PROMPT

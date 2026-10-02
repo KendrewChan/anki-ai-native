@@ -2,6 +2,10 @@
 
 What changed in each version, newest first. How the add-on works today is in [docs/spec.md](docs/spec.md).
 
+## v1.24 — Sharp questions from the front only (2026-10-02)
+
+- The AI writes sharp questions and hints from the card's front alone and never sees the back at that step. Grading still compares your answer with the back.
+
 ## v1.23 — Deck prompts can shape the questions (2026-10-02)
 
 - Deck prompts now override the tutor's defaults: number of questions (up to 8), their wording and sections, what to grade on. The AI can also show the card's own question open above its questions.

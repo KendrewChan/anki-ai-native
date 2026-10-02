@@ -122,7 +122,7 @@ def on_show_question(card):
     S.ctx[card.id] = {"q": q, "a": a, "questions": [], "rules": rules}
     if not rewrite_enabled(card):
         return
-    session().request(card.id, grading.ask_prompt(q, a, rules), grading.parse_questions,
+    session().request(card.id, grading.ask_prompt(q, rules), grading.parse_questions,
                       c.get("ask_timeout_s", 30), on_asked)
 
 

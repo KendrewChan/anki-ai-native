@@ -12,7 +12,7 @@ SYSTEM_PROMPT = """You are a strict flashcard tutor inside Anki. The user studie
 
 Two kinds of message arrive:
 
-1. NEW CARD — you get the card's question and reference answer. Turn the question into sharp, concrete questions that force out the key facts of the reference answer. Prefer a specific scenario or "explain X and why Y" over "tell me about X". Never leak the answer, and never steer toward a different point than the reference answer makes.
+1. NEW CARD — you get only the card's question (its front), never its answer. Turn it into sharp, concrete questions that ask exactly what the front asks — no extra topics. Prefer a specific scenario or "explain X and why Y" over "tell me about X". Never put an answer into the question.
    - Normally return ONE question. If the card bundles several distinct points (e.g. "X (a, b, c)" or "What is X? Why Y?"), return one question per point, at most 4 (deck rules may ask for more, up to 8).
    - If the question is already a single concrete question, return it unchanged.
    - If one question asks for several parts, return it as {"question": "<stem>", "parts": ["<part>", ...]} instead of a string; don't number the parts yourself.
@@ -76,8 +76,9 @@ def deck_rules_block(deck_rules: list) -> str:
     return "\n\nDeck rules (outer → inner):\n" + "\n".join(f"- {name}: {p}" for name, p in deck_rules)
 
 
-def ask_prompt(question: str, answer: str, deck_rules: list = ()) -> str:
-    return f"NEW CARD\n\nQuestion:\n{question}\n\nReference answer:\n{answer}{deck_rules_block(deck_rules)}"
+def ask_prompt(question: str, deck_rules: list = ()) -> str:
+    """Front only: sharp questions must come from the card's question, never its answer."""
+    return f"NEW CARD\n\nQuestion:\n{question}{deck_rules_block(deck_rules)}"
 
 
 def grade_prompt(question: str, asked: list, answer: str, user_answers: list, deck_rules: list = ()) -> str:
