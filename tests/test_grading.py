@@ -283,3 +283,8 @@ def test_card_box_answers_questions_and_edits():
 def test_prompt_explains_boxes_per_question():
     assert "each with ONE answer box" in grading.SYSTEM_PROMPT
     assert "use separate questions when each needs its own box" in grading.SYSTEM_PROMPT
+
+
+def test_prompt_says_one_page_shared_context_once():
+    assert "shared context appears once" in grading.SYSTEM_PROMPT
+    assert "the way to present the card's question as written" in grading.SYSTEM_PROMPT

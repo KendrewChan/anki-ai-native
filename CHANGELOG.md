@@ -7,6 +7,7 @@ What changed in each version, newest first. How the add-on works today is in [do
 - The tutor prompt is rewritten as principles. It describes once what the user sees (questions, one box each, parts, hints), and the patch-style rules from earlier fixes are folded into general ones, e.g. "verdicts agree upward". Behaviour and the reply format are unchanged.
 - **Sharp questions** is now **Rewrite question**. Saying "sharp questions" in Settings still works.
 - The **Deck Prompts** section in Settings is now **Deck Settings**. It holds each deck's prompt and its switches.
+- The tutor knows all questions show on one page. Shared context such as the card's question appears once (opened via Show original) instead of being repeated in every question.
 
 ## v1.26 — Ask AI about the card (2026-10-02)
 
