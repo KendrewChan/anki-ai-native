@@ -279,7 +279,7 @@ class ConfigPage:
         if not self.replies:
             return ('<div class="ai">Tell me what to change, in plain words — e.g. "use opus", '
                     '"give me 90 seconds to answer", "grade more strictly", "undo that".</div>')
-        return "".join(f'<div class="{"err" if bad else "ai"}">{html.escape(t)}</div>' for t, bad in self.replies)
+        return "".join(f'<div class="{"err" if bad else "ai"}">&gt; {html.escape(t)}</div>' for t, bad in self.replies)
 
     def _sections_html(self) -> str:
         cfg = self._cfg()
