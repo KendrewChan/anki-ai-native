@@ -25,7 +25,7 @@ class State:
     def __init__(self):
         self.enabled = bool(state.get("ui", "ai_study"))  # AI Study mode; as the user last left it
         self.session = None
-        self.edit_session = None  # separate CLI for "change this note" requests on the answer side
+        self.edit_session = None  # separate CLI for highlight questions / note changes
         self.cwd = None
         self.page = None
         self.gen_page = None
@@ -37,7 +37,7 @@ class State:
         self.card_id = None
         self.ctx = {}  # card_id -> {"q", "a", "questions"}
         self.verdicts = {}  # card_id -> (verdict, questions, answers)
-        self.edit_status = {}  # card_id -> (text, is_error) of the last note edit
+        self.ask_toast = {}  # card_id -> (text, is_error): an edit's reply, shown once the card redraws
         self.failures = 0
         self.disabled = None  # reason string once AI is off for this session
 
@@ -104,12 +104,14 @@ def on_error(err) -> str:
 
 def on_card_will_show(text: str, card, kind: str) -> str:
     if kind == "reviewQuestion" and active(card):
-        return ui.question_html(text, rewrite_enabled(card))
-    if kind == "reviewAnswer" and card.id in S.verdicts:
+        return ui.question_html(text, rewrite_enabled(card)) + ui.ask_html("question")
+    if kind != "reviewAnswer":
+        return text
+    if card.id in S.verdicts:
         # Below the front: Anki scrolls <hr id=answer> to the top, so anything above it starts off-screen.
         front, back = grading.split_answer(text)
-        return front + ui.verdict_html(*S.verdicts[card.id], S.edit_status.get(card.id)) + back
-    return text
+        text = front + ui.verdict_html(*S.verdicts[card.id]) + back
+    return text + ui.ask_html("answer", S.ask_toast.pop(card.id, None)) if active(card) else text
 
 
 def on_show_question(card):
@@ -159,8 +161,8 @@ def on_js_message(handled, message: str, context):
             mw.reviewer._showAnswer()
     elif message.startswith("aiStudy:submit:"):
         submit(message[len("aiStudy:submit:"):])
-    elif message.startswith("aiStudy:edit:"):
-        edit_note(message[len("aiStudy:edit:"):])
+    elif message.startswith("aiStudy:ask:"):
+        ask(message[len("aiStudy:ask:"):])
     return (True, None)
 
 
@@ -188,19 +190,34 @@ def submit(payload: str):
     session().request(card_id, prompt, grading.parse_grade, cfg().get("grade_timeout_s", 60), on_graded)
 
 
-def edit_note(request: str):
-    """Answer side, after grading: ask the AI to change this card's note, then save it (one undo step)."""
+def ask(payload: str):
+    """Highlight-to-ask, either side. Question side: help without the answer, never edits. Answer side: answer
+    questions and change the note when asked (one undo step)."""
     card = mw.reviewer.card
-    if card is None or card.id not in S.verdicts:
+    data = json.loads(payload)
+    sel, request = str(data.get("sel", "")), str(data.get("text", "")).strip()
+    if card is None or not request or not active(card):
         return
-    verdict, questions, answers = S.verdicts[card.id]
+    cid, side, c = card.id, mw.reviewer.state, cfg()
+    rules = deck_rules(card, c)
+    if side == "question":
+        ctx = S.ctx.get(cid) or {}
+        prompt = grading.question_side_prompt(ctx.get("q") or grading.strip_html(card.question()),
+                                              ctx.get("questions", []), request, sel, rules)
+
+        def on_hint(_cid, result, err):  # any "fields" are ignored: the question side never edits
+            show_ask_reply(cid, side, f"Failed: {err.message}" if err else result["reply"] or "…", bool(err))
+
+        edit_session().request(cid, prompt, grading.parse_edit_reply, c.get("grade_timeout_s", 60), on_hint)
+        return
+    verdict, questions, answers = S.verdicts.get(cid, (None, [], []))
     note = card.note()
-    cid, nid = card.id, note.id
-    prompt = grading.edit_prompt(dict(note.items()), request, questions, answers, verdict, deck_rules(card, cfg()))
+    nid = note.id
+    prompt = grading.edit_prompt(dict(note.items()), request, questions, answers, verdict, rules, sel)
 
     def on_edited(_cid, result, err):
         if err:
-            show_edit_status(cid, f"Edit failed: {err.message}", True)  # not counted toward disabling AI Study
+            show_ask_reply(cid, side, f"Failed: {err.message}", True)  # not counted toward disabling AI Study
             return
         note = mw.col.get_note(nid)  # fresh: the Missed append may have saved in the meantime
         changes, unknown = grading.plan_field_edit(dict(note.items()), result["fields"])
@@ -208,28 +225,27 @@ def edit_note(request: str):
         if unknown:
             reply += f" (ignored unknown fields: {', '.join(unknown)})"
         if not changes:
-            show_edit_status(cid, reply, bool(unknown))
+            show_ask_reply(cid, side, reply, bool(unknown))
             return
         for name, value in changes.items():
             note[name] = value
         done = f"{reply} Changed: {', '.join(changes)} — Edit → Undo reverts it."
-        S.edit_status[cid] = (done, False)
+        S.ask_toast[cid] = (done, False)  # the redraw closes the box; the toast carries the reply
         (
             # No initiator: the reviewer sees a note change and redraws the card with the new text.
             update_note(parent=mw, note=note)
-            .success(lambda _: show_edit_status(cid, done, False))
-            .failure(lambda e: show_edit_status(cid, f"Not saved: {e}", True))
+            .success(lambda _: show_ask_reply(cid, side, done, False))
+            .failure(lambda e: show_ask_reply(cid, side, f"Not saved: {e}", True))
             .run_in_background()
         )
 
-    edit_session().request(cid, prompt, grading.parse_edit_reply, cfg().get("grade_timeout_s", 60), on_edited)
+    edit_session().request(cid, prompt, grading.parse_edit_reply, c.get("grade_timeout_s", 60), on_edited)
 
 
-def show_edit_status(card_id, text: str, err: bool):
-    """Remember the edit result for redraws, and show it now if that card's answer is still on screen."""
-    S.edit_status[card_id] = (text, err)
-    if card_id == S.card_id and mw.reviewer.state == "answer":
-        eval_card(ui.edit_status_js(text, err))
+def show_ask_reply(card_id, side: str, text: str, err: bool):
+    """Show the reply if that card is still on screen, on the side it was asked from."""
+    if card_id == S.card_id and mw.reviewer.state == side:
+        eval_card(ui.ask_reply_js(text, err))
 
 
 def append_missed(missed: list):

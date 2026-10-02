@@ -244,12 +244,17 @@ def pick_missed_field(field_names: list):
             return name
     return field_names[-1] if field_names else None
 
-EDIT_SYSTEM_PROMPT = """You help the user with one Anki note right after they reviewed it: answer their questions about it (the topic, their answer, the grade) and change the note when they ask. Every message gives the note's fields (raw HTML), what the user was asked and answered, the grade, and the user's message. Never touch any other note.
+EDIT_SYSTEM_PROMPT = """You help the user with one Anki note while they review it: they highlight part of the card and ask about it, or ask you to change the note. Never touch any other note. Each message says which side of the card the user is on and, under "Highlighted", the text they selected — their message is about that text.
 
+QUESTION SIDE: they haven't answered yet, and you get only the card's question. Help them understand what is asked (a term, the wording, the scope) without giving away the answer or anything that would let them skip recalling it. Never change the note: "fields" is always {}.
+
+ANSWER SIDE: you get the note's fields (raw HTML) and, when they were graded, what they were asked and answered and the grade.
 - A question: answer it in "reply" — clear and to the point, at most about 120 words — and change nothing, even if the answer shows a gap in the card (you may suggest adding it).
 - A change request: change only what it asks for; keep each field's existing HTML style. "reply" says in one short sentence what you changed.
 - Both in one message: do both.
-- A field may end with a "Missed (date)" section the add-on maintains — leave it as it is unless the user asks about it. If a change request is unclear, change nothing and ask in "reply". Deck rules, when given, take priority over everything else here (including the formatting guide) except the JSON reply format.
+- A field may end with a "Missed (date)" section the add-on maintains — leave it as it is unless the user asks about it. If a change request is unclear, change nothing and ask in "reply".
+
+Deck rules, when given, take priority over everything else here (including the formatting guide) except the JSON reply format.
 
 Reply with JSON only, no code fences:
 {"reply": "<your answer, or what you changed>", "fields": {"<field name>": "<the whole new field HTML>", ...}}
@@ -257,14 +262,29 @@ Include only the fields you change; {} for none."""
 EDIT_SYSTEM_PROMPT += "\n\n" + STYLE_GUIDE
 
 
-def edit_prompt(fields: dict, request: str, questions: list, answers: list, verdict: dict,
-                deck_rules: list = ()) -> str:
-    """fields: field name -> raw HTML of the note right now."""
+def _highlighted(selection: str) -> str:
+    return f"\n\nHighlighted:\n{selection.strip()}" if selection.strip() else ""
+
+
+def edit_prompt(fields: dict, request: str, questions: list, answers: list, verdict=None,
+                deck_rules: list = (), selection: str = "") -> str:
+    """Answer side. fields: field name -> raw HTML of the note right now; verdict None = not graded."""
     note = "\n\n".join(f"[{name}]\n{value}" for name, value in fields.items())
-    asked = questions or ["(the card's own question)"]
-    pairs = "\n".join(f"Q: {q}\nUser: {a.strip() or '(blank)'}" for q, a in zip(asked, _pad(answers, len(asked))))
-    return (f"NOTE FIELDS\n\n{note}{deck_rules_block(deck_rules)}\n\nReview:\n{pairs}\n"
-            f"Grade: {verdict.get('verdict')} — {verdict.get('feedback', '')}\n\nUser's request:\n{request}")
+    review = ""
+    if verdict:
+        asked = questions or ["(the card's own question)"]
+        pairs = "\n".join(f"Q: {q}\nUser: {a.strip() or '(blank)'}" for q, a in zip(asked, _pad(answers, len(asked))))
+        review = f"\n\nReview:\n{pairs}\nGrade: {verdict.get('verdict')} — {verdict.get('feedback', '')}"
+    return (f"ANSWER SIDE\n\nNOTE FIELDS\n\n{note}{deck_rules_block(deck_rules)}{review}"
+            f"{_highlighted(selection)}\n\nUser's request:\n{request}")
+
+
+def question_side_prompt(question: str, questions: list, request: str, selection: str = "", deck_rules: list = ()) -> str:
+    """Question side: only what the user can see — never the answer."""
+    shown = "".join(f"\n- {q}" for q in questions)
+    shown = f"\n\nQuestions shown to the user:{shown}" if shown else ""
+    return (f"QUESTION SIDE\n\nCard's question:\n{question}{shown}{deck_rules_block(deck_rules)}"
+            f"{_highlighted(selection)}\n\nUser's request:\n{request}")
 
 
 def parse_edit_reply(text: str) -> dict:

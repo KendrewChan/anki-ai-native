@@ -223,12 +223,10 @@ def test_parse_edit_reply_and_plan():
         grading.parse_edit_reply('{"fields": ["x"]}')
 
 
-def test_verdict_html_has_edit_bar_with_status():
+def test_verdict_html_has_no_ask_box():
     v = {"verdict": "correct", "ease": 3, "feedback": "f", "missed": [], "per_question": []}
-    html = ui.verdict_html(v, [], ["a"], ("Not saved: <x>", True))
-    assert html.index('id="ai-edit"') < html.index('class="ai-verdict"')
-    assert '<div id="ai-edit-status" class="ai-err">Not saved: &lt;x&gt;</div>' in html
-    assert 'id="ai-edit-status">' in ui.verdict_html(v, [], ["a"])
+    html = ui.verdict_html(v, [], ["a"])
+    assert "ai-edit" not in html and "ai-ask" not in html
 
 
 def test_style_guide_in_every_system_prompt():
@@ -271,13 +269,25 @@ def test_ask_prompt_sends_front_only():
     assert "only the card's question (its front), never its answer" in grading.SYSTEM_PROMPT
 
 
-def test_card_box_answers_questions_and_edits():
-    assert "answer their questions" in grading.EDIT_SYSTEM_PROMPT and "change nothing" in grading.EDIT_SYSTEM_PROMPT
-    v = {"verdict": "correct", "ease": 3, "feedback": "f", "missed": [], "per_question": []}
-    html = ui.verdict_html(v, [], ["a"], ("Because **ordering** is per partition", False))
-    assert 'placeholder="Ask AI about this card, or to change it' in html and "Because <b>ordering</b>" in html
-    js = ui.edit_status_js("x < **y**", False)
-    assert "x &lt; <b>y</b>" in js and "innerHTML" in js
+def test_highlight_ask_answers_questions_and_edits():
+    assert "change nothing" in grading.EDIT_SYSTEM_PROMPT and "without giving away the answer" in grading.EDIT_SYSTEM_PROMPT
+    q = ui.ask_html("question")
+    a = ui.ask_html("answer", ("Changed **Back** <x>", False))
+    assert 'id="ai-ask-bubble"' in q and "what does this term mean" in q and "const first = null;" in q
+    assert "reword this" in a and "Changed <b>Back</b> &lt;x&gt;" in a and "</script>" not in a.split("const first")[1][:80]
+    js = ui.ask_reply_js("x < **y**", True)
+    assert "x &lt; <b>y</b>" in js and js.endswith("true);")
+
+
+def test_question_side_prompt_never_has_the_answer():
+    p = grading.question_side_prompt("What is CAP?", ["Name the three"], "what's partition", "partition", [("D", "terse")])
+    assert p.startswith("QUESTION SIDE") and "Highlighted:\npartition" in p and "- Name the three" in p
+    assert p.endswith("what's partition") and "terse" in p and "NOTE FIELDS" not in p
+
+
+def test_edit_prompt_without_grade_and_with_selection():
+    p = grading.edit_prompt({"Back": "B"}, "why?", [], [], None, (), "some text")
+    assert p.startswith("ANSWER SIDE") and "Review:" not in p and "Highlighted:\nsome text" in p
 
 
 def test_prompt_explains_boxes_per_question():

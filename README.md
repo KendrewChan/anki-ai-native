@@ -2,7 +2,7 @@
 
 An Anki add-on that turns Claude Code (or Codex) into a study tutor, right inside Anki.
 
-- **AI Study** — the AI asks you questions about each card, you type answers, it grades them and suggests Again / Hard / Good / Easy. You still press the button, so Anki's scheduling is untouched.
+- **AI Study** — the AI asks you questions about each card, you type answers, it grades them and suggests Again / Hard / Good / Easy. You still press the button, so Anki's scheduling is untouched. Highlight any card text to ask the AI about it, or to change the note.
 - **⚙ Settings** — change behaviour in plain words ("use opus", "grade more strictly").
 - **✨ Generate/Update Cards** — make or improve cards from your notes on the Desktop. Cards wait in an `AI-GEN` deck until you approve and submit them.
 

@@ -2,6 +2,10 @@
 
 What changed in each version, newest first. How the add-on works today is in [docs/spec.md](docs/spec.md).
 
+## v1.30 — Highlight to ask (2026-10-02)
+
+- Highlight any text on a card and click the **Ask AI** bubble to ask about it, on the front as well as the back. On the front the AI helps you understand the question without giving away the answer. On the back it answers questions or changes the note. This replaces the Ask AI box above the grading.
+
 ## v1.29 — Grading in view (2026-10-02)
 
 - Deck Settings: clicking the selected deck again closes it and removes the `Deck prompt for` prefix. The empty Default deck is hidden, as in Anki's deck list.

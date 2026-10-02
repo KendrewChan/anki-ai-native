@@ -36,10 +36,6 @@ CSS = """
 .ai-verdict .ai-claims { margin: 0.2em 0 0.3em 1.2em; padding: 0; white-space: normal; } .ai-claims li { margin: 0.15em 0; }
 .ai-why { opacity: 0.8; font-size: 0.92em; }
 .ai-mark-correct { color: #27864a; } .ai-mark-partial { color: #d97706; } .ai-mark-wrong { color: #d33; }
-#ai-edit { text-align: left; width: min(92vw, 70em); box-sizing: border-box; margin: 0 auto 0.6em; }
-#ai-edit input { width: 100%; box-sizing: border-box; padding: 0.45em 0.6em; font: inherit; font-size: 0.9em;
-                 border-radius: 6px; border: 1px solid #8888; background: transparent; color: inherit; }
-#ai-edit-status { font-size: 0.9em; opacity: 0.85; min-height: 1.1em; margin-top: 0.3em; white-space: pre-wrap; }
 .ai-verdict ul { margin: 0.3em 0 0 1.2em; padding: 0; }
 </style>
 """
@@ -178,40 +174,116 @@ def question_html(original: str, mode: str) -> str:
     return f'{CSS}<div id="ai-study">{orig}<div id="ai-items">{item}</div><div id="ai-status"></div></div>{js}'
 
 
-EDIT_JS = """
+ASK_CSS = """
+<style>
+#ai-ask-bubble { display: none; position: absolute; z-index: 20; padding: 0.2em 0.6em; border-radius: 6px; cursor: pointer;
+                 font-size: 0.8em; background: #2b2b2b; color: #eee; box-shadow: 0 2px 8px #0005; user-select: none; }
+#ai-ask-pop { display: none; position: absolute; z-index: 20; width: min(26em, calc(100vw - 16px)); box-sizing: border-box;
+              padding: 0.5em 0.6em; border-radius: 8px; text-align: left; font-size: 0.9em; line-height: 1.4;
+              background: var(--canvas, Canvas); color: inherit; border: 1px solid #8886; box-shadow: 0 4px 16px #0004; }
+#ai-ask-quote { font-size: 0.85em; opacity: 0.7; border-left: 3px solid #8886; padding-left: 0.5em; margin-bottom: 0.4em;
+                max-height: 4.2em; overflow: hidden; white-space: pre-wrap; }
+#ai-ask-input { width: 100%; box-sizing: border-box; padding: 0.35em 0.5em; font: inherit; border-radius: 6px;
+                border: 1px solid #8888; background: transparent; color: inherit; }
+#ai-ask-out { margin-top: 0.4em; white-space: pre-wrap; max-height: 40vh; overflow-y: auto; }
+#ai-ask-out:empty { display: none; }
+#ai-ask-out.ai-err { color: #d33; }
+#ai-ask-toast { display: none; position: fixed; z-index: 20; left: 50%; bottom: 12px; transform: translateX(-50%);
+                width: max-content; max-width: min(30em, calc(100vw - 16px)); padding: 0.45em 0.8em; border-radius: 8px;
+                font-size: 0.9em; text-align: left; white-space: pre-wrap; cursor: pointer;
+                background: #2b2b2b; color: #eee; box-shadow: 0 3px 12px #0006; }
+</style>
+"""
+
+ASK_JS = """
 <script>
 (function () {
-  const box = document.querySelector("#ai-edit input");
-  const status = document.getElementById("ai-edit-status");
-  box.addEventListener("keydown", function (e) {
-    e.stopPropagation();  // keep Anki's keys (1-4, space, e…) out of the box
-    if (e.key === "Escape") { box.blur(); return; }
-    if (e.key !== "Enter" || e.isComposing || !box.value.trim()) return;
-    e.preventDefault();
-    pycmd("aiStudy:edit:" + box.value.trim());
-    box.value = ""; box.disabled = true;
-    status.className = ""; status.textContent = "Thinking…";
+  const $ = id => document.getElementById(id);
+  const bubble = $("ai-ask-bubble"), pop = $("ai-ask-pop"), quote = $("ai-ask-quote");
+  const input = $("ai-ask-input"), out = $("ai-ask-out"), toastEl = $("ai-ask-toast");
+  let sel = "", rect = null, timer = null;
+  const mine = el => el && (bubble.contains(el) || pop.contains(el) || toastEl.contains(el));
+  const typeset = el => { if (window.MathJax && MathJax.typesetPromise) MathJax.typesetPromise([el]).catch(() => {}); };
+
+  function place(el) {  // just under the highlight, kept inside the window
+    el.style.display = "block";
+    const base = el.offsetParent ? el.offsetParent.getBoundingClientRect() : {top: 0, left: 0};
+    const left = Math.max(8, Math.min(rect.left, window.innerWidth - el.offsetWidth - 8));
+    el.style.left = (left - base.left) + "px";
+    el.style.top = (rect.bottom + 6 - base.top) + "px";
+  }
+  function close() { pop.style.display = "none"; bubble.style.display = "none"; }
+  function toast(html, err) {
+    toastEl.innerHTML = html; toastEl.style.color = err ? "#f88" : "";
+    toastEl.style.display = "block"; typeset(toastEl);
+    clearTimeout(timer); timer = setTimeout(() => { toastEl.style.display = "none"; }, 12000);
+  }
+
+  bubble.addEventListener("mousedown", function (e) {  // mousedown: before the click clears the selection
+    e.preventDefault(); e.stopPropagation();
+    bubble.style.display = "none";
+    quote.textContent = sel.length > 300 ? sel.slice(0, 300) + "…" : sel;
+    out.innerHTML = ""; out.className = ""; input.value = ""; input.disabled = false;
+    place(pop); input.focus({preventScroll: true});
   });
+  input.addEventListener("keydown", function (e) {
+    e.stopPropagation();  // keep Anki's keys (1-4, space, e…) out of the box
+    if (e.key === "Escape") { close(); return; }
+    if (e.key !== "Enter" || e.isComposing || !input.value.trim()) return;
+    e.preventDefault();
+    pycmd("aiStudy:ask:" + JSON.stringify({sel: sel, text: input.value.trim()}));
+    input.value = ""; input.disabled = true;
+    out.className = ""; out.textContent = "Thinking…";
+  });
+  toastEl.addEventListener("click", () => { toastEl.style.display = "none"; });
+
+  window.aiAsk = {
+    up(e) {
+      if (mine(e.target) || (e.target.closest && e.target.closest("textarea, input, select"))) return;
+      setTimeout(function () {
+        const s = window.getSelection(), text = s.rangeCount ? s.toString().trim() : "";
+        if (!text) { bubble.style.display = "none"; return; }
+        sel = text; rect = s.getRangeAt(0).getBoundingClientRect();
+        pop.style.display = "none"; place(bubble);
+      }, 0);
+    },
+    down(e) { if (!mine(e.target)) close(); },
+    reply(html, err) {  // in the open box, else as a toast (e.g. after an edit redrew the card)
+      if (pop.style.display !== "block") { toast(html, err); return; }
+      out.innerHTML = html; out.className = err ? "ai-err" : ""; typeset(out);
+      input.disabled = false; input.focus({preventScroll: true});
+    },
+  };
+  if (!window.aiAskBound) {  // once per page; the handlers act only while this card has the bubble
+    window.aiAskBound = true;
+    document.addEventListener("mouseup", e => { if ($("ai-ask-pop")) window.aiAsk.up(e); });
+    document.addEventListener("mousedown", e => { if ($("ai-ask-pop")) window.aiAsk.down(e); });
+  }
+  const first = __TOAST__;
+  if (first) toast(first[0], first[1]);
 })();
 </script>
 """
 
-
-def edit_bar_html(status=None) -> str:
-    """Answer-side box to ask the AI to change this note. status = (text, is_error) of the last edit, or None."""
-    text, err = status or ("", False)
-    cls = ' class="ai-err"' if err else ""
-    return (f'<div id="ai-edit"><input placeholder="Ask AI about this card, or to change it — e.g. why is X true? · '
-            f'add an example to the back (Enter)"><div id="ai-edit-status"{cls}>{grading.rich(text)}</div></div>{EDIT_JS}')
+ASK_PLACEHOLDER = {
+    "question": "Ask about this — e.g. what does this term mean? (Enter)",
+    "answer": "Ask about this, or change it — e.g. why? · reword this · add an example (Enter)",
+}
 
 
-def edit_status_js(text: str, err: bool) -> str:
-    """Show the AI's reply (answer or edit result) in the open answer side, typeset any math, re-enable the box."""
-    return ("(function(s, b){ if (!s) return; "
-            f"s.innerHTML = {json.dumps(grading.rich(text))}; s.className = {json.dumps('ai-err' if err else '')}; "
-            "if (window.MathJax && MathJax.typesetPromise) MathJax.typesetPromise([s]).catch(() => {}); "
-            "if (b) { b.disabled = false; b.focus(); } })"
-            "(document.getElementById('ai-edit-status'), document.querySelector('#ai-edit input'));")
+def ask_html(side: str, toast=None) -> str:
+    """Highlight-to-ask: selecting card text shows an "Ask AI" bubble that opens a box at the highlight.
+    side = "question" | "answer"; toast = (text, is_error) to show on load (the reply to an edit that redrew the card)."""
+    first = [grading.rich(toast[0]), toast[1]] if toast else None
+    return (f'{ASK_CSS}<div id="ai-ask-bubble">Ask AI</div>'
+            f'<div id="ai-ask-pop"><div id="ai-ask-quote"></div>'
+            f'<input id="ai-ask-input" placeholder="{html.escape(ASK_PLACEHOLDER[side])}"><div id="ai-ask-out"></div></div>'
+            f'<div id="ai-ask-toast"></div>' + ASK_JS.replace("__TOAST__", json.dumps(first)))
+
+
+def ask_reply_js(text: str, err: bool) -> str:
+    """Show the AI's reply to a highlight question on the open card."""
+    return f"window.aiAsk && aiAsk.reply({json.dumps(grading.rich(text))}, {json.dumps(err)});"
 
 
 def display_items(items: list) -> list:
@@ -220,7 +292,7 @@ def display_items(items: list) -> list:
     return [dict(it, text=r(it["text"]), hint=r(it["hint"]),
                  parts=[dict(p, text=r(p["text"]), hint=r(p["hint"])) for p in it["parts"]]) for it in items]
 
-def verdict_html(verdict: dict, questions: list, answers: list, edit_status=None) -> str:
+def verdict_html(verdict: dict, questions: list, answers: list) -> str:
     """questions = what was asked (may be empty: cloze / ask failed); answers = one per box."""
     v = verdict["verdict"]
     marks = {"correct": "✓", "partial": "~", "wrong": "✗"}
@@ -244,7 +316,7 @@ def verdict_html(verdict: dict, questions: list, answers: list, edit_status=None
         if missed else "<b>Missed:</b> nothing"
     )
     return (
-        f'{CSS}{edit_bar_html(edit_status)}<div class="ai-verdict"><span class="ai-badge ai-{v}">{v.upper()}</span>'
+        f'{CSS}<div class="ai-verdict"><span class="ai-badge ai-{v}">{v.upper()}</span>'
         f'{"".join(rows)}'
         f"<div style='margin-top:0.5em'>{grading.rich(verdict['feedback'])}</div>"
         f"<div style='margin-top:0.5em'>{missed_part}</div></div>"
