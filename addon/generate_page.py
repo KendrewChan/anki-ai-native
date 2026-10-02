@@ -26,7 +26,8 @@ CSS = CONFIG_CSS + """
        background: transparent; color: inherit; cursor: default; outline: none; }
 #refinfo { font-size: 0.85em; opacity: 0.75; min-height: 1.2em; margin-bottom: 0.5em; }
 #refinfo.bad { color: #d33; opacity: 1; }
-.stg .deck { font-weight: 600; margin: 0.8em 0 0.2em; }
+.stg .deck { font-weight: 600; margin: 0.8em 0 0.2em; display: flex; justify-content: space-between; }
+.stg .deck button { font-weight: normal; }
 .stg .card { display: flex; gap: 0.6em; align-items: flex-start; margin: 0.15em 0 0.15em 1em; }
 .stg .main { flex: 1; min-width: 0; } .stg .q { white-space: pre-wrap; overflow-wrap: anywhere; }
 .stg .plain { padding-left: 1.05em; } .stg .acts { white-space: nowrap; }
@@ -79,6 +80,11 @@ document.getElementById("cmd").addEventListener("keydown", function (e) {
 setTimeout(function () { document.getElementById("cmd").focus(); }, 0);
 </script>
 """
+
+
+def _ids(text: str) -> list:
+    """"12,34" from a button -> staged note ids."""
+    return [int(x) for x in text.split(",") if x.strip().isdigit()]
 
 
 class _Result:
@@ -136,10 +142,10 @@ class GeneratePage:
         elif message in ("aiGen:pickdir", "aiGen:pickfile"):
             self._pick(message == "aiGen:pickdir")
         elif message.startswith("aiGen:accept") and not self.busy:
-            ids = [int(message[len("aiGen:accept:"):])] if message != "aiGen:accept" else None
+            ids = _ids(message[len("aiGen:accept:"):]) if message != "aiGen:accept" else None
             self._run_op(lambda col: _Result(generate_col.accept(col, ids)), self._accepted)
         elif message.startswith("aiGen:discard") and not self.busy:
-            ids = [int(message[len("aiGen:discard:"):])] if message != "aiGen:discard" else None
+            ids = _ids(message[len("aiGen:discard:"):]) if message != "aiGen:discard" else None
             self._run_op(lambda col: _Result(generate_col.discard(col, ids)),
                          lambda n: self.say(f"Discarded {n} staged card{'s' if n != 1 else ''}. "
                                             "Edit → Undo brings them back."))
@@ -281,7 +287,10 @@ class GeneratePage:
         for i, s in enumerate(staged, 1):
             if s["deck"] != deck:
                 deck = s["deck"]
-                out.append(f'<div class="deck">{html.escape(deck or "(no deck)")}</div>')
+                ids = ",".join(str(x["id"]) for x in staged if x["deck"] == deck)
+                out.append(f'<div class="deck">{html.escape(deck or "(no deck)")}<span class="acts">'
+                           f'<button onclick="pycmd(\'aiGen:accept:{ids}\')">Accept deck</button>'
+                           f'<button onclick="pycmd(\'aiGen:discard:{ids}\')">Discard deck</button></span></div>')
             kind = ('<span class="kind upd">UPDATE</span>' if s["of"] else '<span class="kind new">NEW</span>')
             values = list(s["fields"].items())
             question = f'{i}. {kind}<span class="q">{html.escape(strip_html(values[0][1]) if values else "")}</span>'
