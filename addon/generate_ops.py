@@ -111,7 +111,7 @@ def read_references(path: str, root: Path = None) -> dict:
 def ref_summary(refs: dict) -> str:
     n = len(refs["files"])
     chars = sum(len(t) for _n, t in refs["files"])
-    out = f"{n} text file{'s' if n != 1 else ''} ({chars // 1000 or chars and 1}k characters)"
+    out = f"{n} text file{'s' if n != 1 else ''} ({chars:,} characters)"
     if refs["skipped"]:
         shown = ", ".join(refs["skipped"][:3]) + (" …" if len(refs["skipped"]) > 3 else "")
         out += f" · skipped {len(refs['skipped'])} non-text: {shown}"
