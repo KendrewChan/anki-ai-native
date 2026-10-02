@@ -14,7 +14,7 @@ CSS = """
           border-radius: 6px; border: 1px solid #8888; background: transparent; color: inherit; }
 #ai-status { margin-top: 0.4em; font-size: 0.85em; opacity: 0.75; min-height: 1.2em; }
 .ai-err { color: #d33; opacity: 1 !important; }
-.ai-verdict { text-align: left; max-width: 46em; margin: 0 auto 1em; padding: 0.7em 0.9em;
+.ai-verdict { text-align: left; width: min(92vw, 70em); box-sizing: border-box; margin: 0 auto 1em; padding: 0.7em 0.9em;
               border-radius: 8px; border: 1px solid #8884; font-size: 0.92em; }
 .ai-badge { display: inline-block; padding: 0.1em 0.55em; border-radius: 4px; font-weight: 700;
             color: #fff; font-size: 0.85em; letter-spacing: 0.04em; }
