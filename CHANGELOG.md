@@ -6,6 +6,7 @@ What changed in each version, newest first. How the add-on works today is in [do
 
 - Highlight any text on a card and click the blue **AI** bubble at its top-right to ask about it, on the front as well as the back. On the front the AI helps you understand the question without giving away the answer. On the back it answers questions or changes the note. This replaces the Ask AI box above the grading.
 - Fixed: on the front, the bubble didn't appear when a drag across the question ended over the answer box.
+- Fixed: the bubble floated too high above large text. It's now a fixed small size and sits right on the highlight's corner (the popup had the same offset).
 
 ## v1.29 — Grading in view (2026-10-02)
 

@@ -176,11 +176,11 @@ def question_html(original: str, mode: str) -> str:
 
 ASK_CSS = """
 <style>
-#ai-ask-bubble { display: none; position: absolute; z-index: 20; padding: 0.15em 0.5em; cursor: pointer; user-select: none;
-                 font-size: 0.75em; font-weight: 700; line-height: 1.4; color: #fff; background: #2563eb;
-                 border-radius: 0.8em 0.8em 0.8em 0.15em; box-shadow: 0 2px 6px #0004; }
-#ai-ask-bubble::after { content: ""; position: absolute; left: 0; bottom: -0.45em;  /* speech-bubble tail toward the text */
-                        border-style: solid; border-width: 0.5em 0.5em 0 0; border-color: #2563eb transparent transparent transparent; }
+#ai-ask-bubble { display: none; position: absolute; z-index: 20; padding: 1px 6px; cursor: pointer; user-select: none;
+                 font: 700 12px/18px sans-serif; color: #fff; background: #2563eb;  /* fixed size, whatever the card's font */
+                 border-radius: 9px 9px 9px 2px; box-shadow: 0 1px 4px #0004; }
+#ai-ask-bubble::after { content: ""; position: absolute; left: 0; bottom: -5px;  /* speech-bubble tail toward the text */
+                        border-style: solid; border-width: 6px 6px 0 0; border-color: #2563eb transparent transparent transparent; }
 #ai-ask-pop { display: none; position: absolute; z-index: 20; width: min(26em, calc(100vw - 16px)); box-sizing: border-box;
               padding: 0.5em 0.6em; border-radius: 8px; text-align: left; font-size: 0.9em; line-height: 1.4;
               background: var(--canvas, Canvas); color: inherit; border: 1px solid #8886; box-shadow: 0 4px 16px #0004; }
@@ -208,18 +208,24 @@ ASK_JS = """
   const mine = el => el && (bubble.contains(el) || pop.contains(el) || toastEl.contains(el));
   const typeset = el => { if (window.MathJax && MathJax.typesetPromise) MathJax.typesetPromise([el]).catch(() => {}); };
 
+  function origin(el) {  // viewport position of what el's top/left are measured from
+    const op = el.offsetParent;  // a static <body> is reported, but then the page itself is the reference
+    if (!op || (op === document.body && getComputedStyle(op).position === "static"))
+      return {top: -window.scrollY, left: -window.scrollX};
+    return op.getBoundingClientRect();
+  }
   function place(el) {  // just under the highlight, kept inside the window
     el.style.display = "block";
-    const base = el.offsetParent ? el.offsetParent.getBoundingClientRect() : {top: 0, left: 0};
+    const base = origin(el);
     const left = Math.max(8, Math.min(rect.left, window.innerWidth - el.offsetWidth - 8));
     el.style.left = (left - base.left) + "px";
     el.style.top = (rect.bottom + 6 - base.top) + "px";
   }
-  function placeBubble() {  // at the highlight's top-right corner, tail pointing down at it
+  function placeBubble() {  // the selection's top-right corner, tail resting on the text
     bubble.style.display = "block";
-    const base = bubble.offsetParent ? bubble.offsetParent.getBoundingClientRect() : {top: 0, left: 0};
-    const left = Math.max(8, Math.min(rect.right + 2, window.innerWidth - bubble.offsetWidth - 8));
-    const top = Math.max(4, rect.top - bubble.offsetHeight - 6);
+    const base = origin(bubble);
+    const left = Math.max(8, Math.min(rect.right - 2, window.innerWidth - bubble.offsetWidth - 8));
+    const top = Math.max(4, rect.top - bubble.offsetHeight - 3);
     bubble.style.left = (left - base.left) + "px";
     bubble.style.top = (top - base.top) + "px";
   }
