@@ -3,7 +3,7 @@ import sys
 
 import pytest
 
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "..", "anki-ai"))
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 from addon import generate_ops as g  # noqa: E402
 

@@ -10,7 +10,7 @@ import sys
 
 import pytest
 
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "..", "anki-ai"))
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 APP = "/Applications/Anki.app/Contents/Resources/app_packages"
 if os.path.isdir(APP):
     sys.path.append(APP)

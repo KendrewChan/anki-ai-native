@@ -1,0 +1,8 @@
+.DS_Store
+__pycache__/
+.pytest_cache/
+
+# user settings Anki writes into the add-on folder; build output
+addon/meta.json
+addon/.repair_backup/
+dist/

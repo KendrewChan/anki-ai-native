@@ -4,7 +4,7 @@ import threading
 
 import pytest
 
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "..", "anki-ai"))
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 from addon.grading import RETRY_PROMPT, parse_json_reply  # noqa: E402
 from addon.session import ClaudeSession  # noqa: E402

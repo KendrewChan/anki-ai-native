@@ -4,7 +4,7 @@ import threading
 
 import pytest
 
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "..", "anki-ai"))
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 from addon import config_ops, session  # noqa: E402
 from addon.grading import parse_json_reply  # noqa: E402

@@ -4,7 +4,7 @@ import sys
 
 import pytest
 
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "..", "anki-ai"))
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 from addon import health, repair  # noqa: E402
 
