@@ -145,3 +145,9 @@ Each graded review **replaces** the card's Missed section (in the field chosen b
 - State lives in the collection (tags + deck), so staged cards survive restarts and can be edited in the Browser before Accept.
 - **Fresh CLI process per message** (unlike Settings): every message carries references + cards, so one long Claude conversation would overflow its context. The last 3 exchanges are resent as context.
 - Logic in `generate_ops.py` (no Anki; pytest) and `generate_col.py` (takes a `Collection`; `tests/test_generate_col.py` runs on a real temp collection with Anki's own Python, skipped elsewhere).
+
+### v1.9.1 — AI-GEN (2026-10-02, user correction)
+
+- Temp deck renamed **AI-GEN**: created when first needed, reused while it exists. Staged cards may target **any** deck path, including a **new top-level deck** — it lives as `AI-GEN::<Path>` until accepted and only then becomes a real top-level deck. (Replaces the earlier "existing top-level deck only" rule.) Only `AI-GEN` itself is never a target.
+- **Per-deck Accept / Discard** next to each staged deck, plus Accept all / Discard all. Accepting ports that deck's cards out and removes the emptied `AI-GEN` subdecks; `AI-GEN` itself is removed once empty.
+- Feedback: the user's message is echoed in the log; while the AI works the status shows "⏳ Thinking — this can take a minute… Ns" (live seconds, blue).

@@ -1,4 +1,4 @@
-"""Generate page: chat with the AI to make / update cards from Desktop reference files, staged in "AI Generate"."""
+"""Generate page: chat with the AI to make / update cards from Desktop reference files, staged in "AI-GEN"."""
 
 import html
 import json
@@ -15,6 +15,7 @@ from .grading import strip_html
 from .session import make_backend
 
 STATE = "aiStudyGenerate"
+TEMP = html.escape(generate_ops.TEMP_DECK)
 TIMEOUT_S = 300
 MAX_READ_ROUNDS = 2  # times the AI may ask to read decks before answering one message
 
@@ -25,7 +26,8 @@ CSS = CONFIG_CSS + """
        background: transparent; color: inherit; cursor: default; outline: none; }
 #refinfo { font-size: 0.85em; opacity: 0.75; min-height: 1.2em; margin-bottom: 0.5em; }
 #refinfo.bad { color: #d33; opacity: 1; }
-.stg .deck { font-weight: 600; margin: 0.6em 0 0.2em; }
+.stg .deck { font-weight: 600; margin: 0.8em 0 0.2em; } .stg .deck button { font-size: 0.8em; margin-left: 0.5em; }
+#status.busy { opacity: 1; font-size: 0.95em; color: #2a6fd6; }
 .stg details { margin-left: 1em; } .stg summary { cursor: pointer; }
 .stg .kind { font-size: 0.75em; padding: 0 0.35em; border-radius: 4px; border: 1px solid #8888; margin-right: 0.4em; }
 .stg .kind.upd { color: #b07400; border-color: #b0740088; } .stg .kind.new { color: #27864a; border-color: #27864a88; }
@@ -46,7 +48,15 @@ window.aiGen = {
     const open = new Set(Array.from(stg.querySelectorAll("details[open]")).map(d => d.dataset.id));
     stg.innerHTML = stagedHtml;
     stg.querySelectorAll("details").forEach(d => { if (open.has(d.dataset.id)) d.open = true; });
-    document.getElementById("status").textContent = status;
+    const st = document.getElementById("status");
+    clearInterval(this.timer);
+    if (busy) {
+      const t0 = this.since = (this.busy ? this.since : Date.now());
+      const tick = () => { st.textContent = "⏳ " + (status || "Working…") + " " + Math.round((Date.now() - t0) / 1000) + "s"; };
+      tick(); this.timer = setInterval(tick, 1000);
+    } else { st.textContent = status; }
+    st.className = busy ? "busy" : "";
+    this.busy = busy;
     const cmd = document.getElementById("cmd");
     cmd.disabled = busy; if (!busy) cmd.focus();
   },
@@ -78,7 +88,7 @@ class GeneratePage:
     def __init__(self, addon: str):
         self.addon = addon
         self.cwd = None
-        self.replies = deque(maxlen=3)  # (text, is_error)
+        self.replies = deque(maxlen=6)  # (text, "you" | "ai" | "err")
         self.history = deque(maxlen=3)  # (user message, AI reply) sent back as context
         self.ref = ""  # reference path as chosen (validated on every use)
         self.loaded = {}  # deck name -> [note dict] the AI asked to read
@@ -121,10 +131,12 @@ class GeneratePage:
             self._update(None)
         elif message in ("aiGen:pickdir", "aiGen:pickfile"):
             self._pick(message == "aiGen:pickdir")
-        elif message == "aiGen:accept" and not self.busy:
-            self._run_op(lambda col: _Result(generate_col.accept(col)), self._accepted)
-        elif message == "aiGen:discard" and not self.busy:
-            self._run_op(lambda col: _Result(generate_col.discard(col)),
+        elif message.startswith("aiGen:accept") and not self.busy:
+            deck = json.loads(message[len("aiGen:accept:"):]) if message != "aiGen:accept" else None
+            self._run_op(lambda col: _Result(generate_col.accept(col, deck)), self._accepted)
+        elif message.startswith("aiGen:discard") and not self.busy:
+            deck = json.loads(message[len("aiGen:discard:"):]) if message != "aiGen:discard" else None
+            self._run_op(lambda col: _Result(generate_col.discard(col, deck)),
                          lambda n: self.say(f"Discarded {n} staged card{'s' if n != 1 else ''}. "
                                             "Edit → Undo brings them back."))
         elif message.startswith("aiGen:send:") and not self.busy:
@@ -144,6 +156,8 @@ class GeneratePage:
     # --- AI ---
 
     def _send(self, text: str, rounds: int = 0):
+        if not rounds:
+            self.replies.append((text, "you"))
         refs = None
         if self.ref.strip():
             try:
@@ -155,7 +169,7 @@ class GeneratePage:
         staged = generate_col.staged(mw.col)
         prompt = generate_ops.generate_prompt(text, decks, refs, self.loaded, staged, list(self.history))
         self.busy = True
-        self._update("Reading the decks and thinking…" if rounds else "Thinking…")
+        self._update("Reading your decks, thinking…" if rounds else "Thinking — this can take a minute…")
         self._stop()  # fresh process per message: references are resent each time, a long chat would overflow
         self.cwd = self.cwd or tempfile.mkdtemp(prefix="anki_ai_gen_")
         cfg = mw.addonManager.getConfig(self.addon) or {}
@@ -196,7 +210,7 @@ class GeneratePage:
         def done(counts=None):
             self.busy = False
             parts = [f"{v} {k}" for k, v in (counts or {}).items() if v]
-            summary = f" ({', '.join(parts)} — see AI Generate below)" if parts else ""
+            summary = f" ({', '.join(parts)} — see AI-GEN below)" if parts else ""
             self.say(" ".join([reply + summary, *rejected]), err=bool(rejected))
 
         if ops:
@@ -224,7 +238,7 @@ class GeneratePage:
         return [d.name for d in mw.col.decks.all_names_and_ids()]
 
     def say(self, text: str, err: bool = False):
-        self.replies.append((text, err))
+        self.replies.append((text, "err" if err else "ai"))
         self._update(None)
 
     def _update(self, status):
@@ -251,18 +265,22 @@ class GeneratePage:
         if not self.replies:
             return ('<div class="ai">Tell me what cards to make or fix — e.g. "10 cards from these notes into '
                     'Biology::Ch3", "improve my Chem cards using this file", "make card 3 shorter". New and updated '
-                    'cards wait in the AI Generate deck until you Accept.</div>')
-        return "".join(f'<div class="{"err" if bad else "ai"}">&gt; {html.escape(t)}</div>' for t, bad in self.replies)
+                    'cards wait in the AI-GEN deck until you accept them.</div>')
+        return "".join(f'<div class="you">{html.escape(t)}</div>' if kind == "you"
+                       else f'<div class="{kind}">&gt; {html.escape(t)}</div>' for t, kind in self.replies)
 
     def _staged_html(self) -> str:
         staged = generate_col.staged(mw.col)
         if not staged:
-            return '<div class="sect stg"><h3>AI Generate</h3><div style="opacity:.6">Nothing staged yet.</div></div>'
+            return f'<div class="sect stg"><h3>{TEMP}</h3><div style="opacity:.6">Nothing staged yet.</div></div>'
         out, deck = [], None
         for i, s in enumerate(staged, 1):
             if s["deck"] != deck:
                 deck = s["deck"]
-                out.append(f'<div class="deck">{html.escape(deck or "(no deck)")}</div>')
+                arg = html.escape(json.dumps(json.dumps(deck)), quote=True)
+                out.append(f'<div class="deck">{html.escape(deck or "(no deck)")}'
+                           f'<button onclick="pycmd(\'aiGen:accept:\' + {arg})">Accept</button>'
+                           f'<button onclick="pycmd(\'aiGen:discard:\' + {arg})">Discard</button></div>')
             kind = ('<span class="kind upd">UPDATE</span>' if s["of"] else '<span class="kind new">NEW</span>')
             first = strip_html(next(iter(s["fields"].values()), ""))
             title = html.escape(first[:110] + ("…" if len(first) > 110 else ""))
@@ -272,7 +290,7 @@ class GeneratePage:
         n = len(staged)
         buttons = (f'<div class="btns"><button onclick="pycmd(\'aiGen:accept\')">Accept all ({n})</button>'
                    f'<button onclick="pycmd(\'aiGen:discard\')">Discard all</button></div>')
-        return f'<div class="sect stg"><h3>AI Generate — waiting for you</h3>{"".join(out)}{buttons}</div>'
+        return f'<div class="sect stg"><h3>{TEMP} — waiting for you</h3>{"".join(out)}{buttons}</div>'
 
     def _page_html(self) -> str:
         return (

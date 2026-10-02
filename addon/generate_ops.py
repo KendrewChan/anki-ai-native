@@ -7,7 +7,7 @@ from pathlib import Path
 from .config_ops import _resolve_deck
 from .grading import parse_json_reply
 
-TEMP_DECK = "AI Generate"
+TEMP_DECK = "AI-GEN"
 MAX_REF_CHARS = 150_000  # all reference text sent per message
 MAX_FILES = 300
 MAX_DECK_CHARS = 120_000  # existing cards sent per message
@@ -15,7 +15,7 @@ SKIP_DIRS = {".git", "node_modules", "__pycache__", ".venv", "venv"}
 
 GENERATE_SYSTEM_PROMPT = """You make Anki flashcards for the user from their reference files and requests, and improve their existing cards.
 
-Everything you create or update is staged in a temporary deck "AI Generate" whose subdecks mirror the real decks. The user looks at the staged cards, then clicks Accept (updates are written into the original cards, new cards move to their real deck) or Discard. You never change real cards directly.
+Everything you create or update is staged in a temporary top-level deck "AI-GEN" whose subdecks mirror the real deck paths. The user looks at the staged cards, then accepts them (updates are written into the original cards, new cards move to their real deck, which is created if needed) or discards them. You never change real cards directly.
 
 Each message gives you: the deck list, the reference files (may be empty), cards of decks you asked to read, the cards currently staged, the recent conversation, then the user's request.
 
@@ -32,7 +32,7 @@ A change is one of:
 {"remove": <staged card number>}
 
 Rules:
-- deck: an existing deck, or a new subdeck under an existing top-level deck that follows that deck's structure (e.g. "Biology::Ch4" next to "Biology::Ch3"). Never a new top-level deck, never "AI Generate".
+- deck: the real deck path the card belongs in — an existing deck, or a new one (a new subdeck like "Biology::Ch4" next to "Biology::Ch3", or a new top-level deck when nothing fits). Follow the structure of the existing decks. Never "AI-GEN" itself.
 - One fact per card; short, specific fronts; answers as short as possible. Use cloze for definitions, lists and sentences where a key term can be blanked.
 - Field content is Anki HTML: <br>, <b>, <i>, <ul><li>, <code>. No Markdown.
 - When references are given, base cards on them; don't invent facts they don't contain unless asked. Don't duplicate existing or staged cards.
@@ -151,7 +151,7 @@ def generate_prompt(message: str, decks: list, refs: dict = None, existing: dict
         lines = [json.dumps({"staged": i, "kind": f"update of note {s['of']}" if s.get("of") else "new",
                              "deck": s["deck"], "type": s["type"], "fields": s["fields"]}, ensure_ascii=False)
                  for i, s in enumerate(staged, 1)]
-        parts.append("Staged cards (in AI Generate):\n" + "\n".join(lines))
+        parts.append("Staged cards (in AI-GEN):\n" + "\n".join(lines))
     else:
         parts.append("Staged cards: (none)")
     if history:
@@ -181,7 +181,7 @@ def resolve_read(name: str, decks: list) -> str:
 
 
 def target_deck(name, decks: list) -> str:
-    """Where a new card goes: an existing deck, or a new path under an existing top-level deck."""
+    """Where a new card goes: an existing deck, or a new path (existing ancestors keep their real spelling)."""
     real = {d: d for d in decks if not _is_temp(d)}
     try:
         return _resolve_deck(name, real)
@@ -191,9 +191,8 @@ def target_deck(name, decks: list) -> str:
     parts = [p.strip() for p in str(name or "").split("::")]
     if not all(parts):
         raise ValueError(f"bad deck name {name!r}")
-    tops = {d.lower(): d for d in real if "::" not in d}
-    if parts[0].lower() not in tops:
-        raise ValueError(f"no top-level deck {parts[0]!r} — new cards go under an existing deck")
+    if _is_temp("::".join(parts)) or parts[0].lower() == TEMP_DECK.lower():
+        raise ValueError(f"cards can't go into {TEMP_DECK} itself — name their real deck")
     # keep the real spelling of every existing ancestor
     for i in range(len(parts), 0, -1):
         prefix = "::".join(parts[:i]).lower()

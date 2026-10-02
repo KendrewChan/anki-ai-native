@@ -53,7 +53,7 @@ def test_stage_accept(col):
     s = gc.staged(col)
     assert [(x["deck"], x["of"]) for x in s] == [("Biology::Ch3", None), ("Biology::Ch3", orig["id"]),
                                                  ("Biology::Ch4", None)]
-    assert "AI Generate::Biology::Ch4" in decks(col) and "Biology::Ch4" not in decks(col)
+    assert "AI-GEN::Biology::Ch4" in decks(col) and "Biology::Ch4" not in decks(col)
     assert col.get_note(orig["id"])["Back"] == "Mitochondria"  # original untouched until Accept
     assert len(gc.read_deck(col, "Biology")) == 1  # staged copies aren't "existing" cards
 
@@ -64,7 +64,7 @@ def test_stage_accept(col):
     _, counts = gc.accept(col)
     assert counts == {"updated": 1, "added": 2}
     assert col.get_note(orig["id"])["Back"] == "Mitochondria!" and col.get_note(orig["id"]).tags == ["bio"]
-    assert not any(n.startswith("AI Generate") for n in decks(col)) and "Biology::Ch4" in decks(col)
+    assert not any(n.startswith("AI-GEN") for n in decks(col)) and "Biology::Ch4" in decks(col)
     cards = gc.read_deck(col, "Biology")
     assert len(cards) == 3 and {c["deck"] for c in cards} == {"Biology::Ch3", "Biology::Ch4"}
     assert all(gc.TAG not in col.get_note(c["id"]).tags for c in cards)
@@ -77,7 +77,19 @@ def test_edit_remove_discard_undo(col):
     s = gc.staged(col)
     assert [x["fields"]["Back"] for x in s] == ["B"]
     _, n = gc.discard(col)
-    assert n == 1 and gc.staged(col) == [] and col.decks.id_for_name("AI Generate") is None
+    assert n == 1 and gc.staged(col) == [] and col.decks.id_for_name("AI-GEN") is None
     assert col.note_count() == 1
     col.undo()  # one undo step brings the whole staged deck back
     assert len(gc.staged(col)) == 1
+
+
+def test_accept_one_deck_leaves_the_rest(col):
+    stage(col, [{"add": {"deck": "Physics::Waves", "front": "c?", "back": "speed of light"}},
+                {"add": {"deck": "Biology", "front": "a", "back": "b"}}])
+    _, counts = gc.accept(col, "Physics::Waves")
+    assert counts == {"updated": 0, "added": 1}
+    assert "Physics::Waves" in decks(col) and "AI-GEN::Physics::Waves" not in decks(col)
+    assert "AI-GEN::Physics" not in decks(col)  # emptied parent removed too
+    assert [s["deck"] for s in gc.staged(col)] == ["Biology"] and "AI-GEN::Biology" in decks(col)
+    _, n = gc.discard(col, "Biology")
+    assert n == 1 and col.decks.id_for_name("AI-GEN") is None  # AI-GEN gone once empty

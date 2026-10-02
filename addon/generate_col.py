@@ -1,4 +1,4 @@
-"""Generate: stage, list, accept, discard cards in the "AI Generate" deck. Takes an anki Collection; no aqt."""
+"""Generate: stage, list, accept, discard cards in the "AI-GEN" deck. Takes an anki Collection; no aqt."""
 
 from .generate_ops import TEMP_DECK
 
@@ -41,7 +41,7 @@ def staged(col) -> list:
     for nid in col.find_notes(_search_deck(col, TEMP_DECK)):
         note = col.get_note(nid)
         d = _note_dict(col, note)
-        d["deck"] = d["deck"][len(TEMP_DECK) + 2:]  # "" when sitting in AI Generate itself
+        d["deck"] = d["deck"][len(TEMP_DECK) + 2:]  # "" when sitting in AI-GEN itself
         d["of"] = _original_of(note)
         out.append(d)
     return sorted(out, key=lambda d: (d["deck"].lower(), d["id"]))
@@ -64,7 +64,7 @@ def _staged_did(col, real_deck: str):
 
 def apply_ops(col, ops) -> tuple:
     """Run plan_changes ops as one undo step. Returns (OpChanges, summary counts)."""
-    pos = col.add_custom_undo_entry("AI Generate")
+    pos = col.add_custom_undo_entry(TEMP_DECK)
     counts = {"added": 0, "updated": 0, "edited": 0, "removed": 0}
     by_original = {s["of"]: s["id"] for s in staged(col) if s["of"]}
     for op in ops:
@@ -107,14 +107,26 @@ def apply_ops(col, ops) -> tuple:
     return col.merge_undo_entries(pos), counts
 
 
-def accept(col) -> tuple:
-    """Updates -> written into the original notes; new cards -> their real deck; AI Generate deleted. One undo step."""
+def _cleanup(col):
+    """Remove AI-GEN subdecks left without cards (deepest first), and AI-GEN itself once empty."""
+    temp = [d.name for d in col.decks.all_names_and_ids() if d.name == TEMP_DECK or d.name.startswith(TEMP_DECK + "::")]
+    for name in sorted(temp, key=lambda n: -n.count("::")):
+        did = col.decks.id_for_name(name)
+        if did is not None and not col.find_cards(_search_deck(col, name)):
+            col.decks.remove([did])
+
+
+def accept(col, deck: str = None) -> tuple:
+    """Port staged cards out of AI-GEN (all, or one real deck's): updates -> written into the original notes,
+    new cards -> their real deck (created if missing). Emptied AI-GEN decks are removed. One undo step."""
     from anki.errors import NotFoundError
 
-    pos = col.add_custom_undo_entry("Accept AI Generate")
+    pos = col.add_custom_undo_entry(f"Accept {TEMP_DECK}")
     counts = {"updated": 0, "added": 0}
     drop = []
     for s in staged(col):
+        if deck is not None and s["deck"] != deck:
+            continue
         note = col.get_note(s["id"])
         orig = None
         if s["of"]:
@@ -136,17 +148,15 @@ def accept(col) -> tuple:
             counts["added"] += 1
     if drop:
         col.remove_notes(drop)
-    did = col.decks.id_for_name(TEMP_DECK)
-    if did is not None:
-        col.decks.remove([did])
+    _cleanup(col)
     return col.merge_undo_entries(pos), counts
 
 
-def discard(col) -> tuple:
-    """Delete AI Generate with every staged card; originals are untouched. One undo step."""
-    pos = col.add_custom_undo_entry("Discard AI Generate")
-    n = len(staged(col))
-    did = col.decks.id_for_name(TEMP_DECK)
-    if did is not None:
-        col.decks.remove([did])
-    return col.merge_undo_entries(pos), n
+def discard(col, deck: str = None) -> tuple:
+    """Delete staged cards (all, or one real deck's); originals are untouched. One undo step."""
+    pos = col.add_custom_undo_entry(f"Discard {TEMP_DECK}")
+    ids = [s["id"] for s in staged(col) if deck is None or s["deck"] == deck]
+    if ids:
+        col.remove_notes(ids)
+    _cleanup(col)
+    return col.merge_undo_entries(pos), len(ids)

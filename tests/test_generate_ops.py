@@ -7,7 +7,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "..", "anki-ai"
 
 from addon import generate_ops as g  # noqa: E402
 
-DECKS = ["Default", "Biology", "Biology::Ch3", "Biology::Ch3::Cells", "Chem", "AI Generate", "AI Generate::Biology"]
+DECKS = ["Default", "Biology", "Biology::Ch3", "Biology::Ch3::Cells", "Chem", "AI-GEN", "AI-GEN::Biology"]
 
 
 @pytest.fixture
@@ -53,12 +53,12 @@ def test_target_deck():
     assert g.target_deck("Cells", DECKS) == "Biology::Ch3::Cells"  # unique leaf
     assert g.target_deck("biology::Ch4", DECKS) == "Biology::Ch4"  # new subdeck, real spelling of parent
     assert g.target_deck("Biology::ch3::Membranes", DECKS) == "Biology::Ch3::Membranes"
-    with pytest.raises(ValueError, match="top-level"):
-        g.target_deck("Physics::Waves", DECKS)
+    assert g.target_deck("Physics::Waves", DECKS) == "Physics::Waves"  # new top-level deck is fine
+    for bad in ("AI-GEN", "AI-GEN::Biology", "ai-gen::Physics"):  # the temp deck is never a target
+        with pytest.raises(ValueError):
+            g.target_deck(bad, DECKS)
     with pytest.raises(ValueError):
-        g.target_deck("AI Generate::Biology", DECKS)  # the temp deck is never a target
-    with pytest.raises(ValueError):
-        g.resolve_read("AI Generate", DECKS)
+        g.resolve_read("AI-GEN", DECKS)
 
 
 def test_plan_changes():
@@ -70,7 +70,7 @@ def test_plan_changes():
         {"update": {"note_id": "7", "fields": {"Back": "A2"}}},
         {"edit": {"staged": 1, "fields": {"Back": "z"}}},
         {"remove": 1},
-        {"add": {"deck": "Physics", "front": "F", "back": "B"}},
+        {"add": {"deck": "AI-GEN::Biology", "front": "F", "back": "B"}},
         {"add": {"deck": "Chem", "type": "cloze", "text": "no blanks"}},
         {"update": {"note_id": 8, "fields": {"Back": "?"}}},
         {"update": {"note_id": 7, "fields": {"Back": "A"}}},
@@ -91,7 +91,7 @@ def test_prompt_and_reply():
                                                                     "fields": {"Front": "Q", "Back": "A"}}]},
                           staged, [("hi", "hello")])
     assert "=== a.md ===\nATP" in p and '"note_id": 7' in p and '"kind": "update of note 7"' in p
-    assert "AI Generate" not in p.split("Reference")[0]  # temp deck hidden from the deck list
+    assert "AI-GEN" not in p.split("Reference")[0]  # temp deck hidden from the deck list
     assert p.endswith("User: make cards") and "User: hi\nYou: hello" in p
     r = g.parse_generate_reply('```json\n{"reply": "ok", "read_decks": ["Biology"], "changes": [{"remove": 1}, 3]}\n```')
     assert r == {"reply": "ok", "read_decks": ["Biology"], "changes": [{"remove": 1}]}
