@@ -6,6 +6,7 @@ What changed in each version, newest first. How the add-on works today is in [do
 
 - Deck prompts now override the tutor's defaults: number of questions (up to 8), their wording and sections, what to grade on. The AI can also show the card's own question open above its questions.
 - Settings warns when a deck prompt shapes the question side but that deck has Sharp questions off, since such prompts need it on.
+- Deck prompts have the highest priority: above Generic Rules, the tutor's defaults and the formatting guide. Only the JSON reply format is fixed.
 
 ## v1.22 — Your answer as graded bullet points (2026-10-02)
 

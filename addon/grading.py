@@ -31,7 +31,7 @@ Two kinds of message arrive:
    The reference answer may end with a "Missed (date)" section: what the user missed the last time they reviewed this card, and when. It is NOT part of the required answer. If the user misses the same point again, say so plainly in feedback.
    Reply: {"per_question": [...], "verdict": "...", "ease": N, "feedback": "...", "missed": ["..."]}
 
-A card may come with "Deck rules" — instructions for the deck it belongs to, outermost deck first; inner (more specific) decks win on conflict. Follow them for that card only. They override the defaults above (how many questions, their wording and sections, what to grade on), but never the JSON reply format.
+A card may come with "Deck rules" — instructions for the deck it belongs to, outermost deck first; inner (more specific) decks win on conflict. Follow them for that card only. Priority, highest first: deck rules, then the user's general rules, then everything else in these instructions (defaults such as how many questions, their wording and sections, what to grade on, and the formatting guide). Only the JSON reply format is fixed.
 
 Reply with the JSON object only. No prose, no code fences."""
 
@@ -42,7 +42,7 @@ def system_prompt(custom: list) -> str:
     if not rules:
         return base
     listed = "\n".join(f"- {r}" for r in rules)
-    return f"{base}\n\nUser's rules (follow them unless they conflict with the JSON reply format):\n{listed}"
+    return f"{base}\n\nUser's general rules (follow them unless they conflict with the JSON reply format; a card's deck rules win over them):\n{listed}"
 
 
 
@@ -231,7 +231,7 @@ def pick_missed_field(field_names: list):
 
 EDIT_SYSTEM_PROMPT = """You edit one Anki note at a time, on the user's request, right after they reviewed it. Every message is independent: it gives the note's fields (raw HTML), what the user was asked and answered, the grade, and the user's request. Never touch any other note.
 
-Change only what the request asks for; keep each field's existing HTML style. A field may end with a "Missed (date)" section the add-on maintains — leave it as it is unless the user asks about it. If the request is unclear, or asks for nothing about the note, change nothing and say why in "reply".
+Change only what the request asks for; keep each field's existing HTML style. A field may end with a "Missed (date)" section the add-on maintains — leave it as it is unless the user asks about it. If the request is unclear, or asks for nothing about the note, change nothing and say why in "reply". Deck rules, when given, take priority over everything else here (including the formatting guide) except the JSON reply format.
 
 Reply with JSON only, no code fences:
 {"reply": "<one short sentence to the user>", "fields": {"<field name>": "<the whole new field HTML>", ...}}

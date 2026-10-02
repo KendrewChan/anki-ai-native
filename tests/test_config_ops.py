@@ -224,3 +224,9 @@ def test_toggle_flips_and_defaults_on():
         assert key in config_ops.SETTINGS and label and len(tip) >= 2 and all(len(line) > 20 for line in tip)
     new, log, _, hist = apply([config_ops.toggle_change(BASE, "missed_append")])
     assert new["missed_append"] is False and log == ["✓ missed_append: true → false"] and hist == [BASE]
+
+
+def test_deck_rules_outrank_general_rules():
+    sp = grading.system_prompt(["grade strictly"])
+    assert "Priority, highest first: deck rules, then the user's general rules" in sp
+    assert "a card's deck rules win over them" in sp and "Deck rules, when given, take priority" in grading.EDIT_SYSTEM_PROMPT

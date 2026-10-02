@@ -262,4 +262,4 @@ def test_verdict_html_renders_bold_and_multiline_question():
 def test_deck_rules_override_defaults_and_can_show_original():
     assert grading.parse_questions('{"questions":["a"],"show_original":true}')["show_original"] is True
     assert grading.parse_questions('{"questions":["a"],"show_original":"yes"}')["show_original"] is False
-    assert "override the defaults" in grading.SYSTEM_PROMPT and "up to 8" in grading.SYSTEM_PROMPT
+    assert "Priority, highest first: deck rules" in grading.SYSTEM_PROMPT and "up to 8" in grading.SYSTEM_PROMPT

@@ -78,7 +78,7 @@ Only active while **AI Study** is ON, and only for cards whose home deck has AI 
 - Math: Anki's reviewer typesets each card with MathJax, which covers the verdict. Sharp questions and hints arrive later, so `setQuestions` runs `MathJax.typesetPromise` on them.
 - Replies are JSON, so LaTeX needs doubled backslashes. `parse_json_reply` repairs the usual slip: invalid escapes such as `\(` or `\sqrt` are doubled and parsing retried, and control characters that single-backslash `\frac`, `\times`, `\beta` or `\right` decode to (form feed, tab, backspace, CR before a letter) are turned back into LaTeX. A single-backslash `\n…` command (`\neq`) can't be told apart from a newline, so it stays broken.
 
-**Prompt context**: rendered question and answer as plain text (no images). Custom Generic Rules go in the system prompt; each card sends its own home deck's prompt chain (`card.odid or card.did`, root → leaf, inner wins).
+**Prompt context**: rendered question and answer as plain text (no images). Custom Generic Rules go in the system prompt; each card sends its own home deck's prompt chain (`card.odid or card.did`, root → leaf, inner wins). Priority, highest first: deck rules, Generic Rules, then the built-in tutor defaults and `style.md`; only the JSON reply format is fixed. The note-edit prompt gives deck rules the same top priority. Deck rules reach the question side only when Sharp questions is on for the deck: the switch is decided in code before any AI call, so with it off the AI sees the card (and its deck rules) only when grading.
 
 ## ⚙ Settings (`config_page.py`, `config_ops.py`)
 
