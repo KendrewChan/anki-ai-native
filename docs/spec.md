@@ -77,3 +77,15 @@ Only `main.py` imports Anki; everything else is unit-tested with plain pytest.
 1. **Spike** (throwaway): isolation flags, real stream-json shape, shortcut behaviour while typing, bottom-bar button HTML.
 2. **Unit tests** (pytest): `grading.py` pure functions; `session.py` against `fake_claude.py` (lifecycle, queueing, stale drop, crash restart, timeout, bad JSON).
 3. **Manual acceptance** in Anki: Basic card, cloze card, Space skip, Ctrl+Z, no add-on `claude` process left after leaving the reviewer.
+
+## v1.1 (2026-10-02)
+
+**Multiple questions per card.** `ask` returns `{"questions": [1–4]}` — one per distinct point the Front bundles, else one. Layout: **Show original** at the top, then question + answer box pairs. Enter → next box, Enter in the last box submits all, Shift+Enter newline, Enter with all boxes empty → plain answer. Boxes share ~45vh (single box 35vh), min ~4 lines, resizable. Grade adds `per_question` (✓/~/✗ + note per question); still one overall verdict + one ease, since Anki schedules per card. Cloze unchanged (one box).
+
+**AI Study toggle.** `AI Study: ON/OFF · ⚙ Settings` on the deck list (`deck_browser_will_render_content` → `stats`) and deck overview (`overview_will_render_content` → `table`), plus **Tools → AI Study mode**. Off at every Anki start; off = plain reviewer and no `claude` process. Turning off kills the session.
+
+**Settings page** (`config_page.py`, main-window state `aiStudyConfig` via `mw._aiStudyConfigState/_aiStudyConfigCleanup`; `← Back` → deck list).
+- Top: chat input; every message goes to a separate `claude` session (option B — no commands to learn).
+- AI replies `{"reply", "changes"}`; `config_ops.apply_changes` validates each change (`set` known keys with range/type checks, `add_custom`, `remove_custom`, `undo` = snapshot restore, `login`/`logout` → `claude auth login|logout`) and echoes `✓`/`✗` lines. Saved with `addonManager.writeConfig`.
+- Below: **Configurations** (login state from `claude auth status`, model, timeouts, missed append, claude path; **Log in** button when logged out) and **Custom** (numbered rules, appended to the tutor system prompt via `grading.system_prompt`).
+- The study session is rebuilt from config at each review session start, so changes apply next session.
