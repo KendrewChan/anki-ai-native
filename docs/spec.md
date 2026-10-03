@@ -2,7 +2,7 @@
 
 How the add-on works **now**. Version history is in [CHANGELOG.md](../CHANGELOG.md); the user guide is [guide.md](guide.md). When behaviour changes, update the section here and add a changelog entry.
 
-Built and tested on macOS, Anki 26.9.2.
+Built and tested on macOS, Anki 26.9.2; also installed on Windows.
 
 ## Goal
 
@@ -15,7 +15,8 @@ Run an AI study loop inside the Anki desktop reviewer: the AI turns each card in
 | `__init__.py` | Loads `main.py` only inside Anki | guarded |
 | `main.py` | Hooks, AI Study toggle, reviewer glue | yes |
 | `ui.py` | Reviewer HTML/JS | no |
-| `chat_page.py` | `ChatPage` base for both pages (state enter/leave, Back, chat box, bridge routing); `load_config`, `deck_ids` | yes |
+| `chat_page.py` | `ChatPage` base for both pages (state enter/leave, Back, chat box, bridge routing); `load_config` / `save_config`, `deck_ids` | yes |
+| `synced.py` | Which settings sync with the collection and where they live in it; load, save, one-time migration (takes a `Collection`) | no |
 | `config_page.py`, `generate_page.py` | ⚙ Settings and ✨ Generate/Update Cards pages | yes |
 | `session.py` | Provider CLIs: find, isolate, run, parse; login; model lookup | no |
 | `grading.py` | Tutor prompts, reply parsing, Missed HTML | no |
@@ -26,7 +27,7 @@ Run an AI study loop inside the Anki desktop reviewer: the AI turns each card in
 | `fixes.py` | Fix buttons on Settings replies; talks to the page only through `cfg`, `provider`, `apply`, `login`, `say`, `refresh` | yes |
 | `state.py` | What the add-on learns about the CLIs: real model names, `last_good` versions. `user_files/state.json`, kept by Anki across updates; never in the config or its undo history | no |
 | `style.md` | Formatting guide (bold, note-field HTML, LaTeX) appended to the tutor, note-edit and Generate system prompts | — |
-| `config.json` | Shipped defaults (the user's settings live in the gitignored `meta.json`) | — |
+| `config.json` | Shipped defaults (this computer's settings live in the gitignored `meta.json`; synced ones in the collection, see Synced settings) | — |
 
 Everything that doesn't import `aqt` is unit-tested with plain pytest.
 
@@ -42,7 +43,7 @@ Everything that doesn't import `aqt` is unit-tested with plain pytest.
   - Codex: `--ephemeral --ignore-user-config --ignore-rules --skip-git-repo-check -s read-only --disable shell_tool|apps|browser_use|computer_use|plugins -c web_search="disabled"`.
 - API: `request(card_id, prompt, parse, timeout, callback)` — callbacks on the main thread; the "ask" and "grade" prompts come from `grading.py`. One request in flight, later ones queue. Replies are tagged with their card id; replies for a card no longer shown are dropped.
 - **Models**: `models: {claude, codex}`; `""` = the CLI's default. Settings always shows the real model id, read from the CLI's own output (Claude's stream-json `init` event, Codex's stderr `model:` header), saved by `session.remember_model` into `state.py` the moment a probe or real call reports it (rendering never writes). The two keys older versions kept in the config (`resolved_models`, `last_good`) are dropped on the next settings change.
-- **Login**: Claude `claude auth status|login|logout`; Codex `codex login status` / `codex login` / `codex logout`.
+- **Login**: Claude `claude auth status|login|logout`; Codex `codex login status` / `codex login` / `codex logout`. On Windows, login runs in its own console window (`CREATE_NEW_CONSOLE`, no captured output): the CLI may print a sign-in link and wait for a pasted code, which a hidden process can neither show nor receive. Elsewhere it runs hidden and the CLI opens the browser.
 
 ## Reviewer flow (`main.py`, `ui.py`, `grading.py`)
 
@@ -87,7 +88,7 @@ Only active while **AI Study** is ON, and only for cards whose home deck has AI 
 
 A main-window state (`aiStudyConfig`, **← Back** → deck list).
 
-- **Chat**: each message goes to a separate CLI call; the AI replies `{"reply", "changes"}`. `config_ops.apply_changes` validates each change: `set` known keys with type/range checks, `add_custom` / `remove_custom`, `set_deck_prompt` / `clear_deck_prompt`, `set_deck_ai` / `set_deck_sharp` (`on`: true / false / null = follow parent), `undo` (snapshot restore), `login` / `logout`. Saving uses `addonManager.writeConfig`.
+- **Chat**: each message goes to a separate CLI call; the AI replies `{"reply", "changes"}`. `config_ops.apply_changes` validates each change: `set` known keys with type/range checks, `add_custom` / `remove_custom`, `set_deck_prompt` / `clear_deck_prompt`, `set_deck_ai` / `set_deck_sharp` (`on`: true / false / null = follow parent), `undo` (snapshot restore), `login` / `logout`. Saving uses `chat_page.save_config` (see Synced settings).
 - The log shows the latest 3 replies; rejected changes appear in red inside the reply. The Settings AI gets the real model in use, never lists or guesses model names, and points to the Model dropdown.
 - **Configurations**:
   - Provider and Model rows: dropdowns. The model list is loaded live from the CLI and never stored.
@@ -100,9 +101,24 @@ A main-window state (`aiStudyConfig`, **← Back** → deck list).
   - The real deck tree, with ● marking decks that have a prompt.
   - Selecting a deck shows its panel directly under it in the tree (a selected parent expands): its own prompt, the ones it inherits, and the deck toggles with which deck decides each.
   - Deck toggles (`config_ops.DECK_TOGGLES`): **AI Study** (`deck_ai`; off = plain reviewer for that deck's cards) and **Rewrite question** (`deck_sharp`), each `{deck_id: bool}`. The innermost deck on the path with a setting wins; none = on. Each panel On/Off button flips the selected deck's effective value. Setting a deck (button or chat) drops its subdecks' own settings, so they follow it at once. A subdeck set afterwards stays as an exception until one of its ancestors is set again. Updates keep the page's scroll position. A deck prompt can't switch them: the decision is made before any AI call, so the Settings AI uses `set_deck_sharp`. The old global `sharp_questions` key is dropped on the next settings change.
-  - Stored as `deck_prompts: {deck_id: prompt}`, so prompts survive deck renames. Prompts and toggle settings of deleted decks are pruned on save.
+  - In the config these are `deck_prompts: {deck_id: prompt}`, `deck_ai`, `deck_sharp`; they are stored on the decks themselves (see Synced settings), so they survive deck renames and go away with a deleted deck.
   - Deck names resolve exact → case-insensitive → unique leaf name; anything else is rejected.
 - Changes apply from the next review session. Unsent drafts and in-flight replies survive leaving the page (in memory until Anki restarts).
+
+## Synced settings (`synced.py`, `chat_page.load_config` / `save_config`)
+
+Anki sync carries the collection, never add-on files, so settings that should follow the user live in the collection. The rest of the add-on sees one config dict with the same keys as before.
+
+| Settings | Stored in | How Anki sync merges it |
+|---|---|---|
+| Deck prompt, AI Study, Rewrite question | each deck object, key `anki_ai`: `{"prompt", "ai", "sharp"}` (only the ones set) | per deck: the newer deck wins, so edits to different decks on different devices both survive |
+| `custom`, `missed_append`, `ask_timeout_s`, `grade_timeout_s` | collection config `anki_ai` | the whole config table comes from the side whose collection changed last; an unsynced edit can lose to the other device |
+| `provider`, `models`, `claude_path`, `codex_path` | `meta.json` | not synced: they depend on the computer |
+
+- `save_config` writes `meta.json` (device keys) and only the parts of the collection that changed: an unchanged deck keeps its modification time so it doesn't win a later sync by accident.
+- Migration, once per profile per computer (`state.json` → `synced`): settings the user saved in `meta.json` (never `config.json` defaults, so a fresh install can't overwrite another device's settings) are copied in. General settings only when the collection has none; deck settings only onto decks without an `anki_ai` key. The old keys stay in `meta.json` unread, for other profiles.
+- A deck setting change is a normal Anki undo step ("Update Deck"); earlier undo history is kept. General settings are written without an undo step.
+- After a sync (`sync_did_finish`), an open Settings page redraws. Everything else reads the collection on use.
 
 ## ✨ Generate/Update Cards (`generate_page.py`, `generate_ops.py`, `generate_col.py`)
 

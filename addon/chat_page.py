@@ -4,10 +4,29 @@ import tempfile
 
 from aqt import mw
 
+from . import state, synced
+
 
 def load_config(addon: str) -> dict:
-    """The user's saved settings. Keys added after they were saved are missing: read them with defaults."""
-    return mw.addonManager.getConfig(addon) or {}
+    """The user's settings: this computer's (meta.json) plus those synced with the collection (see synced.py).
+    Keys added after they were saved are missing: read them with defaults."""
+    local = mw.addonManager.getConfig(addon) or {}
+    if mw.col is None:
+        return local
+    if not state.get("synced", mw.pm.name):  # once per profile on this computer: bring older meta.json settings
+        # (only what the user saved: a fresh install's defaults must not overwrite another device's settings)
+        synced.migrate(mw.col, (mw.addonManager.addonMeta(addon) or {}).get("config") or {})
+        state.put("synced", mw.pm.name, True)
+    return synced.load(mw.col, local)
+
+
+def save_config(addon: str, cfg: dict):
+    """meta.json keeps this computer's settings; deck and general settings go into the collection.
+    Settings older versions kept in meta.json stay there untouched (other profiles may still need migrating)."""
+    old = (mw.addonManager.addonMeta(addon) or {}).get("config") or {}
+    legacy = {k: v for k, v in old.items() if k not in synced.local_part(old)}
+    mw.addonManager.writeConfig(addon, {**legacy, **synced.local_part(cfg)})
+    synced.save(mw.col, cfg)
 
 
 def deck_ids() -> dict:

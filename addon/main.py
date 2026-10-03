@@ -324,6 +324,12 @@ def setup_menu():
     mw.form.menuTools.addAction(S.action)
 
 
+def on_sync_finished():
+    """Synced settings are read from the collection on use; only an open Settings page needs redrawing."""
+    if S.page and mw.state == S.page.STATE:
+        S.page.refresh()
+
+
 def setup():
     S.page = ConfigPage(ADDON, end_session)
     S.gen_page = GeneratePage(ADDON)
@@ -336,3 +342,4 @@ def setup():
     gui_hooks.webview_did_receive_js_message.append(on_js_message)
     gui_hooks.reviewer_will_end.append(end_session)
     gui_hooks.profile_will_close.append(end_session)
+    gui_hooks.sync_did_finish.append(on_sync_finished)

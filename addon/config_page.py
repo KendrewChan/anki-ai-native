@@ -2,6 +2,7 @@
 
 import html
 import json
+import os
 import subprocess
 import threading
 from collections import deque
@@ -141,7 +142,7 @@ class ConfigPage(ChatPage):
         if rejected is not None:
             rejected += [line for line in log if line.startswith("✗")]
         if new != cfg:
-            mw.addonManager.writeConfig(self.addon, new)
+            chat_page.save_config(self.addon, new)
             self.on_config_changed()
             self._stop()
             if provider_of(new) != provider_of(cfg):
@@ -306,16 +307,26 @@ class ConfigPage(ChatPage):
         """login opens the browser via Claude Code's own flow; the add-on never sees credentials."""
         provider, path = self.provider()
         label = PROVIDER_LABELS[provider]
-        note = {"login": f"Opening your browser to sign in to {label}…",
+        # Windows: the CLI's sign-in may print a link and wait for a pasted code, which a hidden process can't
+        # show or receive, so it runs in its own console window there.
+        console = action == "login" and os.name == "nt"
+        note = {"login": f"A {label} window opened: sign in in your browser (if the browser didn't open, use the "
+                         "link in that window) and paste the code there if it asks for one…" if console else
+                         f"Opening your browser to sign in to {label}…",
                 "logout": f"Logging out of {label} (this also signs it out everywhere on this computer)…"}[action]
         self.say(note, err=False)
         self._update(None)
 
         def work():
             try:
-                r = subprocess.run(auth_command(provider, path, action), capture_output=True, text=True,
-                                   timeout=300, stdin=subprocess.DEVNULL, **PROC_KW)
-                msg = None if r.returncode == 0 else (r.stderr or r.stdout).strip()[-300:]
+                if console:
+                    r = subprocess.run(auth_command(provider, path, action), timeout=600,
+                                       creationflags=subprocess.CREATE_NEW_CONSOLE)
+                    msg = None if r.returncode == 0 else f"exit code {r.returncode}"
+                else:
+                    r = subprocess.run(auth_command(provider, path, action), capture_output=True, text=True,
+                                       timeout=300, stdin=subprocess.DEVNULL, **PROC_KW)
+                    msg = None if r.returncode == 0 else (r.stderr or r.stdout).strip()[-300:]
             except Exception as e:
                 msg = str(e)
 

@@ -29,6 +29,10 @@ Type what you want in plain words — "use opus", "give me 90 seconds to answer"
 - **Custom Generic Rules** — apply to every card.
 - **Deck Settings** — click a deck and the chat box starts with `Deck prompt for "<deck>": `, so you only type the prompt and press Enter. Click it again to close it and clear the prefix. One prompt per deck; subdecks inherit their parents'. Each deck's panel opens right under it and has **AI Study** and **Rewrite question** On/Off buttons (or say "no rewritten questions for this deck"); AI Study off = that deck reviews normally, without AI. Switching a deck makes all its subdecks follow; switch a subdeck afterwards to make an exception, which lasts until a parent is switched again. Click a deck to see what applies to it. A deck prompt can reshape the questions, e.g. "show the question as written, then one box each for Requirements, APIs, Data Store" (up to 8). This works even with **Rewrite question** off. Off then means the AI keeps the card's question unless the deck prompt says otherwise.
 
+**On several computers:** deck prompts, the deck On/Off buttons, Custom Generic Rules, timeouts and Missed append sync with your collection when you press Sync. Provider, model and CLI path stay per computer. Install the add-on on each computer; settings arrive with the first sync. If you change the same setting on two computers without syncing in between, the most recent change wins (for decks: per deck; for the rest: the computer whose collection changed last). Sync before switching computers.
+
+**Windows login:** **Log in** opens a Claude Code window. Sign in in your browser (if it doesn't open, use the link in that window), and paste the code into that window if it asks for one.
+
 ## Generate/Update Cards (✨ Generate/Update Cards)
 
 Next to ⚙ Settings. Optionally pick a **reference** — a file or folder on your **Desktop** (Choose folder… / Choose file…; text files only, e.g. .txt, .md, code). Then say what you want: "10 cards from these notes into Biology::Ch3", "improve my Chem cards using this file", "make card 3 shorter".
