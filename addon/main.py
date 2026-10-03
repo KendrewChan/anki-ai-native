@@ -13,7 +13,7 @@ from aqt.qt import QAction
 from aqt.reviewer import Reviewer
 
 from . import config_ops, grading, health, state, ui
-from .chat_page import deck_ids, load_config
+from .chat_page import deck_ids, load_config, migrate_once
 from .config_page import ConfigPage
 from .generate_page import GeneratePage
 from .session import make_backend, provider_of
@@ -326,6 +326,7 @@ def setup_menu():
 
 def on_sync_finished():
     """Synced settings are read from the collection on use; only an open Settings page needs redrawing."""
+    migrate_once(ADDON, after_sync=True)
     if S.page and mw.state == S.page.STATE:
         S.page.refresh()
 

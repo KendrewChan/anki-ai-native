@@ -142,7 +142,7 @@ class ConfigPage(ChatPage):
         if rejected is not None:
             rejected += [line for line in log if line.startswith("✗")]
         if new != cfg:
-            chat_page.save_config(self.addon, new)
+            chat_page.save_config(self.addon, new, cfg)
             self.on_config_changed()
             self._stop()
             if provider_of(new) != provider_of(cfg):

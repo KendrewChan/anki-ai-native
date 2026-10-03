@@ -13,20 +13,29 @@ def load_config(addon: str) -> dict:
     local = mw.addonManager.getConfig(addon) or {}
     if mw.col is None:
         return local
-    if not state.get("synced", mw.pm.name):  # once per profile on this computer: bring older meta.json settings
-        # (only what the user saved: a fresh install's defaults must not overwrite another device's settings)
-        synced.migrate(mw.col, (mw.addonManager.addonMeta(addon) or {}).get("config") or {})
-        state.put("synced", mw.pm.name, True)
+    migrate_once(addon)
     return synced.load(mw.col, local)
 
 
-def save_config(addon: str, cfg: dict):
-    """meta.json keeps this computer's settings; deck and general settings go into the collection.
-    Settings older versions kept in meta.json stay there untouched (other profiles may still need migrating)."""
+def migrate_once(addon: str, after_sync: bool = False):
+    """Once per profile on this computer, merge the settings older versions kept in meta.json into the collection.
+    With auto sync on, wait for the startup sync, so other devices' settings are in the collection to merge with
+    (writing first would make this collection the newer one and its config would overwrite theirs)."""
+    if mw.col is None or state.get("synced", mw.pm.name) or (not after_sync and mw.can_auto_sync()):
+        return
+    # only what the user saved: a fresh install's defaults must not overwrite another device's settings
+    synced.migrate(mw.col, (mw.addonManager.addonMeta(addon) or {}).get("config") or {})
+    state.put("synced", mw.pm.name, True)
+
+
+def save_config(addon: str, cfg: dict, before: dict):
+    """meta.json keeps this computer's settings; deck and general settings go into the collection (only what changed
+    since `before`). Settings older versions kept in meta.json stay there untouched (other profiles may still need
+    migrating)."""
     old = (mw.addonManager.addonMeta(addon) or {}).get("config") or {}
     legacy = {k: v for k, v in old.items() if k not in synced.local_part(old)}
     mw.addonManager.writeConfig(addon, {**legacy, **synced.local_part(cfg)})
-    synced.save(mw.col, cfg)
+    synced.save(mw.col, cfg, before)
 
 
 def deck_ids() -> dict:

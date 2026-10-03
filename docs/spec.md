@@ -115,10 +115,10 @@ Anki sync carries the collection, never add-on files, so settings that should fo
 | `custom`, `missed_append`, `ask_timeout_s`, `grade_timeout_s` | collection config `anki_ai` | the whole config table comes from the side whose collection changed last; an unsynced edit can lose to the other device |
 | `provider`, `models`, `claude_path`, `codex_path` | `meta.json` | not synced: they depend on the computer |
 
-- `save_config` writes `meta.json` (device keys) and only the parts of the collection that changed: an unchanged deck keeps its modification time so it doesn't win a later sync by accident.
-- Migration, once per profile per computer (`state.json` → `synced`): settings the user saved in `meta.json` (never `config.json` defaults, so a fresh install can't overwrite another device's settings) are copied in. General settings only when the collection has none; deck settings only onto decks without an `anki_ai` key. The old keys stay in `meta.json` unread, for other profiles.
+- `save_config` writes `meta.json` (device keys) and only the parts of the collection that changed since the config it started from: an unchanged deck keeps its modification time so it doesn't win a later sync by accident, and only the general settings that changed are written into `anki_ai` (so a fresh computer's defaults never land there).
+- Migration, once per profile per computer (`state.json` → `synced`): settings the user saved in `meta.json` (never `config.json` defaults) are merged in. What another device already synced wins where both set the same thing (it was set after this computer's old settings); everything else is added: missing general settings, custom rules not already there (appended), and deck fields a deck doesn't carry yet. With auto sync on (`mw.can_auto_sync()`), migration waits for the first `sync_did_finish`, so the other device's settings are there to merge with; writing before that sync would make this collection the newer one and its config would replace theirs. The old keys stay in `meta.json` unread, for other profiles.
 - A deck setting change is a normal Anki undo step ("Update Deck"); earlier undo history is kept. General settings are written without an undo step.
-- After a sync (`sync_did_finish`), an open Settings page redraws. Everything else reads the collection on use.
+- After a sync (`sync_did_finish`), a pending migration runs and an open Settings page redraws. Everything else reads the collection on use.
 
 ## ✨ Generate/Update Cards (`generate_page.py`, `generate_ops.py`, `generate_col.py`)
 

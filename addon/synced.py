@@ -44,12 +44,14 @@ def load(col, local: dict) -> dict:
     return cfg
 
 
-def save(col, cfg: dict):
-    """Write the synced part of cfg to the collection, touching only what changed (so only changed decks get a
-    newer modification time and win the next sync)."""
-    shared = {k: cfg[k] for k in SHARED if k in cfg}
-    if shared != (col.get_config(CONFIG_KEY, None) or {}):
-        col.set_config(CONFIG_KEY, shared)
+def save(col, cfg: dict, before: dict = None):
+    """Write the synced part of cfg to the collection, touching only what changed since `before` (so only changed
+    decks get a newer modification time, and general settings nobody touched, defaults included, are never
+    written: they can't hide another device's when it migrates)."""
+    changed = {k: cfg[k] for k in SHARED if k in cfg and (before is None or cfg[k] != before.get(k))}
+    current = col.get_config(CONFIG_KEY, None) or {}
+    if changed and {**current, **changed} != current:
+        col.set_config(CONFIG_KEY, {**current, **changed})
     for deck in col.decks.all():
         want = deck_value(cfg, str(deck["id"]))
         if want != (deck.get(DECK_KEY) or {}):
@@ -61,20 +63,24 @@ def save(col, cfg: dict):
 
 
 def migrate(col, legacy: dict) -> bool:
-    """First run on a collection: copy settings older versions kept in meta.json into it.
+    """First run on a collection: merge in settings older versions kept in meta.json.
 
-    General settings only if the collection has none yet (another device may have synced its own); deck settings
-    only onto decks that carry none. Returns True if anything was written.
+    Another device may already have synced settings of its own. Those win where both set the same thing; everything
+    else is added: missing general settings, custom rules not already there (appended), and deck fields a deck
+    doesn't carry yet. Returns True if anything was written.
     """
     wrote = False
-    if col.get_config(CONFIG_KEY, None) is None and any(k in legacy for k in SHARED):
-        col.set_config(CONFIG_KEY, {k: legacy[k] for k in SHARED if k in legacy})
+    current = col.get_config(CONFIG_KEY, None) or {}
+    merged = {**{k: legacy[k] for k in SHARED if k in legacy}, **current}
+    if "custom" in current and "custom" in legacy:
+        merged["custom"] = current["custom"] + [r for r in legacy["custom"] if r not in current["custom"]]
+    if merged != current:
+        col.set_config(CONFIG_KEY, merged)
         wrote = True
     for deck in col.decks.all():
-        if DECK_KEY in deck:
-            continue
-        want = deck_value(legacy, str(deck["id"]))
-        if want:
+        have = deck.get(DECK_KEY) or {}
+        want = {**deck_value(legacy, str(deck["id"])), **have}
+        if want != have:
             deck[DECK_KEY] = want
             col.decks.save(deck)
             wrote = True

@@ -4,7 +4,7 @@ What changed in each version, newest first. How the add-on works today is in [do
 
 ## v1.32 — Settings sync between computers (2026-10-03)
 
-- Deck prompts, the per-deck AI Study and Rewrite question switches, Custom Generic Rules, timeouts and Missed append now sync with your collection through Anki's normal Sync. Provider, model and CLI paths stay per computer. Your existing settings are moved into the collection the first time the new version opens a profile.
+- Deck prompts, the per-deck AI Study and Rewrite question switches, Custom Generic Rules, timeouts and Missed append now sync with your collection through Anki's normal Sync. Provider, model and CLI paths stay per computer. Your existing settings are merged into the collection the first time the new version opens a profile (after its first sync), keeping anything another computer already set.
 - Windows: **Log in** now opens a visible Claude Code window, so you can see the sign-in link and paste the code if asked. Before, the sign-in waited invisibly and never finished.
 
 ## v1.31 — Windows fixes (2026-10-02)
